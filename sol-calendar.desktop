@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=Sol
+Comment=A calendar application for the COSMIC Desktop
+Exec=sol-calendar
+Icon=calendar
+Type=Application
+Categories=Office;Calendar;
+Keywords=calendar;caldav;events;schedule;sol;cosmic;
