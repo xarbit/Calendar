@@ -1,6 +1,7 @@
 mod caldav;
 mod components;
 mod message;
+mod models;
 mod storage;
 mod views;
 
@@ -8,8 +9,9 @@ use chrono::Datelike;
 use cosmic::app::{Core, Settings};
 use cosmic::iced::{alignment, Background, Border, Color, Length, Shadow, Vector};
 use cosmic::iced::widget::stack;
-use cosmic::widget::{self, button, column, container, divider, layer_container, mouse_area, row, scrollable};
+use cosmic::widget::{self, button, column, container, divider, mouse_area, row, scrollable};
 use cosmic::{Application, Element};
+use models::CalendarState;
 use storage::LocalStorage;
 
 const APP_ID: &str = "io.github.xarbit.SolCalendar";
@@ -27,6 +29,8 @@ struct CosmicCalendar {
     storage: LocalStorage,
     show_sidebar: bool,
     show_search: bool,
+    // Cache calendar state to avoid recalculating on every render
+    calendar_cache: Option<CalendarState>,
 }
 
 impl Default for CosmicCalendar {
@@ -35,15 +39,19 @@ impl Default for CosmicCalendar {
         let storage_path = LocalStorage::get_storage_path();
         let storage = LocalStorage::load_from_file(&storage_path).unwrap_or_default();
 
+        let year = now.year();
+        let month = now.month();
+
         CosmicCalendar {
             core: Core::default(),
             current_view: CalendarView::Month,
-            current_year: now.year(),
-            current_month: now.month(),
+            current_year: year,
+            current_month: month,
             selected_day: Some(now.day()),
             storage,
             show_sidebar: true,
             show_search: false,
+            calendar_cache: Some(CalendarState::new(year, month)),
         }
     }
 }
@@ -97,15 +105,19 @@ impl Application for CosmicCalendar {
         let storage_path = LocalStorage::get_storage_path();
         let storage = LocalStorage::load_from_file(&storage_path).unwrap_or_default();
 
+        let year = now.year();
+        let month = now.month();
+
         let app = CosmicCalendar {
             core,
             current_view: CalendarView::Month,
-            current_year: now.year(),
-            current_month: now.month(),
+            current_year: year,
+            current_month: month,
             selected_day: Some(now.day()),
             storage,
             show_sidebar: true,
             show_search: false,
+            calendar_cache: Some(CalendarState::new(year, month)),
         };
         (app, cosmic::app::Task::none())
     }
@@ -284,6 +296,23 @@ impl Application for CosmicCalendar {
 }
 
 impl CosmicCalendar {
+    /// Update calendar cache if month/year changed
+    fn update_cache(&mut self) {
+        let needs_update = self.calendar_cache.as_ref().map_or(true, |cache| {
+            cache.year != self.current_year || cache.month != self.current_month
+        });
+
+        if needs_update {
+            self.calendar_cache = Some(CalendarState::new(self.current_year, self.current_month));
+        }
+    }
+
+    /// Get or create calendar cache
+    fn get_cache(&mut self) -> &CalendarState {
+        self.update_cache();
+        self.calendar_cache.as_ref().unwrap()
+    }
+
     fn render_sidebar(&self) -> Element<'_, Message> {
         let mini_calendar = self.render_mini_calendar();
 
