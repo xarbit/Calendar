@@ -4,6 +4,7 @@ mod components;
 mod message;
 mod models;
 mod storage;
+mod ui_constants;
 mod views;
 
 use cache::CalendarCache;
@@ -194,17 +195,7 @@ impl Application for CosmicCalendar {
             }
             Message::PreviousPeriod => {
                 match self.current_view {
-                    CalendarView::Month => {
-                        if self.current_month == 1 {
-                            self.current_month = 12;
-                            self.current_year -= 1;
-                        } else {
-                            self.current_month -= 1;
-                        }
-                        // Update cache and pre-cache surrounding months
-                        self.cache.set_current(self.current_year, self.current_month);
-                        self.cache.precache_surrounding(1, 2);
-                    }
+                    CalendarView::Month => self.navigate_to_previous_month(),
                     CalendarView::Week => {
                         // Week navigation logic
                     }
@@ -215,17 +206,7 @@ impl Application for CosmicCalendar {
             }
             Message::NextPeriod => {
                 match self.current_view {
-                    CalendarView::Month => {
-                        if self.current_month == 12 {
-                            self.current_month = 1;
-                            self.current_year += 1;
-                        } else {
-                            self.current_month += 1;
-                        }
-                        // Update cache and pre-cache surrounding months
-                        self.cache.set_current(self.current_year, self.current_month);
-                        self.cache.precache_surrounding(1, 2);
-                    }
+                    CalendarView::Month => self.navigate_to_next_month(),
                     CalendarView::Week => {
                         // Week navigation logic
                     }
@@ -235,13 +216,7 @@ impl Application for CosmicCalendar {
                 }
             }
             Message::Today => {
-                let now = chrono::Local::now();
-                self.current_year = now.year();
-                self.current_month = now.month();
-                self.selected_day = Some(now.day());
-                // Update cache and pre-cache surrounding months
-                self.cache.set_current(self.current_year, self.current_month);
-                self.cache.precache_surrounding(1, 2);
+                self.navigate_to_today();
             }
             Message::SelectDay(day) => {
                 self.selected_day = Some(day);
@@ -253,20 +228,10 @@ impl Application for CosmicCalendar {
                 self.show_search = !self.show_search;
             }
             Message::MiniCalendarPrevMonth => {
-                if self.current_month == 1 {
-                    self.current_month = 12;
-                    self.current_year -= 1;
-                } else {
-                    self.current_month -= 1;
-                }
+                self.navigate_to_previous_month();
             }
             Message::MiniCalendarNextMonth => {
-                if self.current_month == 12 {
-                    self.current_month = 1;
-                    self.current_year += 1;
-                } else {
-                    self.current_month += 1;
-                }
+                self.navigate_to_next_month();
             }
             Message::NewEvent => {
                 // TODO: Open new event dialog
@@ -286,6 +251,40 @@ impl Application for CosmicCalendar {
 }
 
 impl CosmicCalendar {
+    /// Navigate to the previous month
+    fn navigate_to_previous_month(&mut self) {
+        if self.current_month == 1 {
+            self.current_month = 12;
+            self.current_year -= 1;
+        } else {
+            self.current_month -= 1;
+        }
+        self.cache.set_current(self.current_year, self.current_month);
+        self.cache.precache_surrounding(1, 2);
+    }
+
+    /// Navigate to the next month
+    fn navigate_to_next_month(&mut self) {
+        if self.current_month == 12 {
+            self.current_month = 1;
+            self.current_year += 1;
+        } else {
+            self.current_month += 1;
+        }
+        self.cache.set_current(self.current_year, self.current_month);
+        self.cache.precache_surrounding(1, 2);
+    }
+
+    /// Navigate to today
+    fn navigate_to_today(&mut self) {
+        let now = chrono::Local::now();
+        self.current_year = now.year();
+        self.current_month = now.month();
+        self.selected_day = Some(now.day());
+        self.cache.set_current(self.current_year, self.current_month);
+        self.cache.precache_surrounding(1, 2);
+    }
+
     fn render_sidebar(&self) -> Element<'_, Message> {
         // Use calendar cache module
         views::render_sidebar(self.cache.current_state(), self.selected_day)
