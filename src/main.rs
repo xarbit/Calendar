@@ -568,13 +568,14 @@ impl CosmicCalendar {
                     let day_cell = if is_today {
                         // Today: outlined with accent color border (not filled)
                         container(
-                            widget::text::title4(day.to_string())
+                            container(widget::text::title4(day.to_string()))
+                                .padding([4, 8, 0, 0])  // Top-right padding
+                                .width(Length::Fill)
+                                .align_x(alignment::Horizontal::Right)
                         )
-                        .padding(10)
-                        .width(Length::Fixed(50.0))
-                        .height(Length::Fixed(50.0))
-                        .center_x(Length::Fill)
-                        .center_y(Length::Fill)
+                        .width(Length::Fill)
+                        .height(Length::Fill)
+                        .padding(4)
                         .style(|theme: &cosmic::Theme| {
                             container::Style {
                                 background: None,
@@ -589,13 +590,14 @@ impl CosmicCalendar {
                     } else if is_selected {
                         // Selected: filled with accent color
                         container(
-                            widget::text::title4(day.to_string())
+                            container(widget::text::title4(day.to_string()))
+                                .padding([4, 8, 0, 0])  // Top-right padding
+                                .width(Length::Fill)
+                                .align_x(alignment::Horizontal::Right)
                         )
-                        .padding(10)
-                        .width(Length::Fixed(50.0))
-                        .height(Length::Fixed(50.0))
-                        .center_x(Length::Fill)
-                        .center_y(Length::Fill)
+                        .width(Length::Fill)
+                        .height(Length::Fill)
+                        .padding(4)
                         .style(|theme: &cosmic::Theme| {
                             container::Style {
                                 background: Some(Background::Color(theme.cosmic().accent_color().into())),
@@ -609,13 +611,14 @@ impl CosmicCalendar {
                     } else {
                         // Normal day
                         container(
-                            widget::text(day.to_string())
+                            container(widget::text(day.to_string()))
+                                .padding([4, 8, 0, 0])  // Top-right padding
+                                .width(Length::Fill)
+                                .align_x(alignment::Horizontal::Right)
                         )
-                        .padding(10)
-                        .width(Length::Fixed(50.0))
-                        .height(Length::Fixed(50.0))
-                        .center_x(Length::Fill)
-                        .center_y(Length::Fill)
+                        .width(Length::Fill)
+                        .height(Length::Fill)
+                        .padding(4)
                     };
 
                     // Wrap in mouse_area for click handling - no theme button styling
