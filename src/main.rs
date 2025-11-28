@@ -1,5 +1,8 @@
 mod caldav;
+mod components;
+mod message;
 mod storage;
+mod views;
 
 use chrono::Datelike;
 use cosmic::app::{Core, Settings};
