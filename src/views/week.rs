@@ -1,4 +1,5 @@
-use cosmic::iced::{alignment, Border, Length};
+use chrono::Datelike;
+use cosmic::iced::{alignment, Background, Border, Length};
 use cosmic::widget::{column, container, row, scrollable};
 use cosmic::{widget, Element};
 
@@ -8,12 +9,12 @@ use crate::models::WeekState;
 use crate::ui_constants::{
     SPACING_TINY, PADDING_SMALL,
     FONT_SIZE_SMALL, FONT_SIZE_MEDIUM, BORDER_RADIUS, COLOR_DAY_CELL_BORDER,
-    HOUR_ROW_HEIGHT, TIME_LABEL_WIDTH, ALL_DAY_HEADER_HEIGHT
+    HOUR_ROW_HEIGHT, TIME_LABEL_WIDTH, ALL_DAY_HEADER_HEIGHT, COLOR_WEEKEND_BACKGROUND
 };
 
 pub fn render_week_view(week_state: &WeekState, locale: &LocalePreferences) -> Element<'static, Message> {
-    let all_day_section = render_all_day_section(week_state);
-    let time_grid = render_time_grid(locale);
+    let all_day_section = render_all_day_section(week_state, locale);
+    let time_grid = render_time_grid(week_state, locale);
 
     let content = column()
         .spacing(0)
@@ -27,7 +28,7 @@ pub fn render_week_view(week_state: &WeekState, locale: &LocalePreferences) -> E
 }
 
 /// Render the all-day events section at the top
-fn render_all_day_section(week_state: &WeekState) -> Element<'static, Message> {
+fn render_all_day_section(week_state: &WeekState, locale: &LocalePreferences) -> Element<'static, Message> {
     let mut header_row = row().spacing(0);
 
     // Time column placeholder
@@ -40,6 +41,7 @@ fn render_all_day_section(week_state: &WeekState) -> Element<'static, Message> {
     // Day headers
     for date in week_state.days.clone() {
         let is_today = week_state.is_today(&date);
+        let is_weekend = locale.is_weekend(date.weekday());
         let day_name = format!("{}", date.format("%a"));
         let day_number = format!("{}", date.format("%d"));
 
@@ -76,7 +78,12 @@ fn render_all_day_section(week_state: &WeekState) -> Element<'static, Message> {
                 .width(Length::Fill)
                 .height(Length::Fixed(ALL_DAY_HEADER_HEIGHT))
                 .padding(PADDING_SMALL)
-                .style(|_theme: &cosmic::Theme| container::Style {
+                .style(move |_theme: &cosmic::Theme| container::Style {
+                    background: if is_weekend {
+                        Some(Background::Color(COLOR_WEEKEND_BACKGROUND))
+                    } else {
+                        None
+                    },
                     border: Border {
                         width: 0.5,
                         color: COLOR_DAY_CELL_BORDER,
@@ -91,7 +98,7 @@ fn render_all_day_section(week_state: &WeekState) -> Element<'static, Message> {
 }
 
 /// Render the main time grid with hourly slots
-fn render_time_grid(locale: &LocalePreferences) -> Element<'static, Message> {
+fn render_time_grid(week_state: &WeekState, locale: &LocalePreferences) -> Element<'static, Message> {
     let mut grid = column().spacing(0);
 
     // Render 24 hours
@@ -120,13 +127,20 @@ fn render_time_grid(locale: &LocalePreferences) -> Element<'static, Message> {
             })
         );
 
-        // Day columns
-        for _ in 0..7 {
+        // Day columns - check each day for weekend status
+        for date in week_state.days.clone() {
+            let is_weekend = locale.is_weekend(date.weekday());
+
             hour_row = hour_row.push(
                 container(widget::text(""))
                     .width(Length::Fill)
                     .height(Length::Fixed(HOUR_ROW_HEIGHT))
-                    .style(|_theme: &cosmic::Theme| container::Style {
+                    .style(move |_theme: &cosmic::Theme| container::Style {
+                        background: if is_weekend {
+                            Some(Background::Color(COLOR_WEEKEND_BACKGROUND))
+                        } else {
+                            None
+                        },
                         border: Border {
                             width: 0.5,
                             color: COLOR_DAY_CELL_BORDER,

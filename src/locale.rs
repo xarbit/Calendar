@@ -59,6 +59,17 @@ impl LocalePreferences {
             Weekday::Sun => -6,
         }
     }
+
+    /// Check if a given weekday is a weekend day
+    /// Weekend is typically Saturday and Sunday, but this can vary by locale
+    pub fn is_weekend(&self, weekday: chrono::Weekday) -> bool {
+        use chrono::Weekday;
+
+        // For most locales, weekend is Saturday and Sunday
+        // In some Middle Eastern countries, weekend is Friday and Saturday
+        // For now, use standard Saturday/Sunday
+        matches!(weekday, Weekday::Sat | Weekday::Sun)
+    }
 }
 
 impl Default for LocalePreferences {

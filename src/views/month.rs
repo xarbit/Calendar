@@ -3,6 +3,7 @@ use cosmic::widget::{column, container, row};
 use cosmic::{widget, Element};
 
 use crate::components::render_day_cell;
+use crate::locale::LocalePreferences;
 use crate::message::Message;
 use crate::models::CalendarState;
 use crate::ui_constants::{
@@ -13,6 +14,7 @@ use crate::ui_constants::{
 pub fn render_month_view(
     calendar_state: &CalendarState,
     selected_day: Option<u32>,
+    locale: &LocalePreferences,
 ) -> Element<'static, Message> {
     let mut grid = column().spacing(SPACING_TINY).padding(PADDING_MONTH_GRID);
 
@@ -64,10 +66,12 @@ pub fn render_month_view(
             if let Some(day) = day_opt {
                 let is_today = calendar_state.is_today(*day);
                 let is_selected = selected_day == Some(*day);
+                let weekday = calendar_state.get_weekday(*day);
+                let is_weekend = locale.is_weekend(weekday);
 
                 // Directly push cell without extra container wrapper
                 week_row = week_row.push(
-                    container(render_day_cell(*day, is_today, is_selected))
+                    container(render_day_cell(*day, is_today, is_selected, is_weekend))
                         .width(Length::Fill)
                         .height(Length::Fill)
                 );

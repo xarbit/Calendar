@@ -28,7 +28,7 @@ pub fn render_main_content<'a>(
 
     // Render current calendar view
     let calendar_view = match current_view {
-        CalendarView::Month => views::render_month_view(cache.current_state(), selected_day),
+        CalendarView::Month => views::render_month_view(cache.current_state(), selected_day, locale),
         CalendarView::Week => views::render_week_view(week_state, locale),
         CalendarView::Day => views::render_day_view(day_state, locale),
     };

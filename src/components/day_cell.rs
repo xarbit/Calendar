@@ -1,14 +1,15 @@
-use cosmic::iced::{alignment, Background, Border, Color, Length};
+use cosmic::iced::{alignment, Background, Border, Length};
 use cosmic::widget::{container, mouse_area};
 use cosmic::{widget, Element};
 
 use crate::message::Message;
-use crate::ui_constants::{BORDER_RADIUS, PADDING_DAY_CELL, COLOR_DAY_CELL_BORDER};
+use crate::ui_constants::{BORDER_RADIUS, PADDING_DAY_CELL, COLOR_DAY_CELL_BORDER, COLOR_WEEKEND_BACKGROUND};
 
 pub fn render_day_cell(
     day: u32,
     is_today: bool,
     is_selected: bool,
+    is_weekend: bool,
 ) -> Element<'static, Message> {
     // Create single mouse_area with styled container - reduces widget count
     let day_text = if is_today || is_selected {
@@ -50,14 +51,18 @@ pub fn render_day_cell(
                 ..Default::default()
             })
     } else {
-        // Normal day - light border
+        // Normal day - light border with optional weekend background
         container(day_text)
             .padding(PADDING_DAY_CELL)
             .width(Length::Fill)
             .height(Length::Fill)
             .align_x(alignment::Horizontal::Right)
-            .style(|_theme: &cosmic::Theme| container::Style {
-                background: None,
+            .style(move |_theme: &cosmic::Theme| container::Style {
+                background: if is_weekend {
+                    Some(Background::Color(COLOR_WEEKEND_BACKGROUND))
+                } else {
+                    None
+                },
                 border: Border {
                     color: COLOR_DAY_CELL_BORDER.into(),
                     width: 1.0,
