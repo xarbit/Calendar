@@ -9,6 +9,7 @@ menu-file = File
 menu-edit = Edit
 menu-view = View
 menu-new-event = New Event...
+menu-new-calendar = New Calendar...
 menu-import-ical = Import iCal...
 menu-export-ical = Export iCal...
 menu-settings = Settings...
@@ -42,7 +43,8 @@ week-abbr = Wk
 # Calendar actions
 calendar-add = Add Calendar
 calendar-edit = Edit
-calendar-delete = Delete
+calendar-delete = Delete Calendar
+calendar-select = Select Calendar
 calendar-toggle = Toggle visibility
 
 # Days of week (abbreviated)
@@ -93,6 +95,17 @@ button-save = Save
 button-cancel = Cancel
 button-delete = Delete
 button-close = Close
+button-create = Create
+
+# Dialog - New Calendar
+dialog-new-calendar-title = New Calendar
+dialog-calendar-name = Name
+dialog-calendar-name-placeholder = Calendar name
+dialog-calendar-color = Color
+
+# Dialog - Delete Calendar
+dialog-delete-calendar-title = Delete Calendar
+dialog-delete-calendar-message = Are you sure you want to delete "{$name}"? This will also delete all events in this calendar.
 
 # Search
 search-placeholder = Search events...

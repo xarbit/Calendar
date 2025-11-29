@@ -1,6 +1,6 @@
-use cosmic::iced::{alignment, Color, Length};
+use cosmic::iced::{Color, Length};
 use cosmic::iced_widget::text_input;
-use cosmic::widget::{column, container, row, mouse_area};
+use cosmic::widget::{column, container};
 use cosmic::{widget, Element};
 
 use crate::message::Message;

@@ -52,3 +52,6 @@ open = "5.3"
 
 # UUID generation for event IDs
 uuid = { version = "1.11", features = ["v4"] }
+
+# SQLite database with SQLCipher encryption support
+rusqlite = { version = "0.32", features = ["bundled-sqlcipher"] }

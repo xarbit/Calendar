@@ -1,6 +1,7 @@
 use chrono::{Datelike, NaiveDate, NaiveTime, TimeZone, Utc};
-use crate::app::CosmicCalendar;
+use crate::app::{CosmicCalendar, NewCalendarDialogState, DeleteCalendarDialogState};
 use crate::caldav::CalendarEvent;
+use crate::components::color_picker::CALENDAR_COLORS;
 use crate::message::Message;
 use crate::views::CalendarView;
 use cosmic::app::Task;
@@ -58,6 +59,7 @@ pub fn handle_message(app: &mut CosmicCalendar, message: Message) -> Task<Messag
         }
         Message::SelectCalendar(id) => {
             app.selected_calendar_id = Some(id);
+            app.update_selected_calendar_color();
         }
         Message::OpenColorPicker(id) => {
             app.color_picker_open = Some(id);
@@ -123,6 +125,51 @@ pub fn handle_message(app: &mut CosmicCalendar, message: Message) -> Task<Messag
             return cosmic::task::message(cosmic::Action::Cosmic(
                 cosmic::app::Action::Surface(action),
             ));
+        }
+        // Calendar management messages
+        Message::OpenNewCalendarDialog => {
+            handle_open_new_calendar_dialog(app);
+        }
+        Message::NewCalendarNameChanged(name) => {
+            if let Some(ref mut dialog) = app.new_calendar_dialog {
+                dialog.name = name;
+            }
+        }
+        Message::NewCalendarColorChanged(color) => {
+            if let Some(ref mut dialog) = app.new_calendar_dialog {
+                dialog.color = color;
+            }
+        }
+        Message::ConfirmNewCalendar => {
+            handle_confirm_new_calendar(app);
+        }
+        Message::CancelNewCalendar => {
+            app.new_calendar_dialog = None;
+        }
+        Message::DeleteSelectedCalendar => {
+            handle_delete_selected_calendar(app);
+        }
+        Message::RequestDeleteCalendar(id) => {
+            handle_request_delete_calendar(app, id);
+        }
+        Message::SelectCalendarByIndex(index) => {
+            if let Some(calendar) = app.calendar_manager.sources().get(index) {
+                let id = calendar.info().id.clone();
+                app.selected_calendar_id = Some(id);
+                app.update_selected_calendar_color();
+            }
+        }
+        Message::DeleteCalendarByIndex(index) => {
+            if let Some(calendar) = app.calendar_manager.sources().get(index) {
+                let id = calendar.info().id.clone();
+                handle_request_delete_calendar(app, id);
+            }
+        }
+        Message::ConfirmDeleteCalendar => {
+            handle_confirm_delete_calendar(app);
+        }
+        Message::CancelDeleteCalendar => {
+            app.delete_calendar_dialog = None;
         }
     }
 
@@ -277,6 +324,9 @@ fn handle_commit_quick_event(app: &mut CosmicCalendar) {
             eprintln!("Failed to sync calendar: {}", e);
         }
     }
+
+    // Refresh the cached events to show the new event
+    app.refresh_cached_events();
 }
 
 /// Delete an event by its UID from all calendars
@@ -288,4 +338,108 @@ fn handle_delete_event(app: &mut CosmicCalendar, uid: String) {
             break;
         }
     }
+    // Refresh cached events to reflect deletion
+    app.refresh_cached_events();
+}
+
+/// Open the new calendar dialog with default values
+fn handle_open_new_calendar_dialog(app: &mut CosmicCalendar) {
+    // Default to the first color in the palette
+    let default_color = CALENDAR_COLORS
+        .first()
+        .map(|(hex, _)| hex.to_string())
+        .unwrap_or_else(|| "#3B82F6".to_string());
+
+    app.new_calendar_dialog = Some(NewCalendarDialogState {
+        name: String::new(),
+        color: default_color,
+    });
+}
+
+/// Confirm and create the new calendar
+fn handle_confirm_new_calendar(app: &mut CosmicCalendar) {
+    let Some(dialog) = app.new_calendar_dialog.take() else {
+        return;
+    };
+
+    let name = dialog.name.trim();
+    if name.is_empty() {
+        // Don't create calendar with empty name
+        return;
+    }
+
+    // Generate a unique ID based on the name
+    let id = name
+        .to_lowercase()
+        .chars()
+        .filter(|c| c.is_alphanumeric() || *c == ' ')
+        .map(|c| if c == ' ' { '-' } else { c })
+        .collect::<String>();
+
+    // Make sure ID is unique by appending a number if needed
+    let mut unique_id = id.clone();
+    let mut counter = 1;
+    while app.calendar_manager.sources().iter().any(|c| c.info().id == unique_id) {
+        unique_id = format!("{}-{}", id, counter);
+        counter += 1;
+    }
+
+    // Add the calendar
+    app.calendar_manager.add_local_calendar(
+        unique_id.clone(),
+        name.to_string(),
+        dialog.color,
+    );
+
+    // Select the new calendar
+    app.selected_calendar_id = Some(unique_id);
+    app.update_selected_calendar_color();
+}
+
+/// Open the delete calendar confirmation dialog for the selected calendar
+fn handle_delete_selected_calendar(app: &mut CosmicCalendar) {
+    let Some(ref calendar_id) = app.selected_calendar_id else {
+        return;
+    };
+    handle_request_delete_calendar(app, calendar_id.clone());
+}
+
+/// Open the delete calendar confirmation dialog for a specific calendar
+fn handle_request_delete_calendar(app: &mut CosmicCalendar, calendar_id: String) {
+    // Find the calendar to get its name
+    let calendar_name = app
+        .calendar_manager
+        .sources()
+        .iter()
+        .find(|c| c.info().id == calendar_id)
+        .map(|c| c.info().name.clone())
+        .unwrap_or_else(|| calendar_id.clone());
+
+    app.delete_calendar_dialog = Some(DeleteCalendarDialogState {
+        calendar_id,
+        calendar_name,
+    });
+}
+
+/// Confirm and delete the calendar
+fn handle_confirm_delete_calendar(app: &mut CosmicCalendar) {
+    let Some(dialog) = app.delete_calendar_dialog.take() else {
+        return;
+    };
+
+    // Delete the calendar
+    app.calendar_manager.delete_calendar(&dialog.calendar_id);
+
+    // If we deleted the selected calendar, select another one
+    if app.selected_calendar_id.as_ref() == Some(&dialog.calendar_id) {
+        app.selected_calendar_id = app
+            .calendar_manager
+            .sources()
+            .first()
+            .map(|c| c.info().id.clone());
+        app.update_selected_calendar_color();
+    }
+
+    // Refresh events in case any events from the deleted calendar were displayed
+    app.refresh_cached_events();
 }

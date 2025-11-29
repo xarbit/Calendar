@@ -7,7 +7,6 @@ use crate::menu_action::MenuAction;
 use crate::message::Message;
 use crate::models::{CalendarState, WeekState, DayState, YearState};
 use crate::settings::AppSettings;
-use crate::storage::LocalStorage;
 use crate::views::{self, CalendarView};
 use chrono::{Datelike, NaiveDate};
 use cosmic::app::Core;
@@ -19,6 +18,24 @@ use std::collections::HashMap;
 
 const APP_ID: &str = "io.github.xarbit.SolCalendar";
 
+/// State for the new calendar dialog
+#[derive(Debug, Clone, Default)]
+pub struct NewCalendarDialogState {
+    /// Calendar name being entered
+    pub name: String,
+    /// Selected color for the new calendar
+    pub color: String,
+}
+
+/// State for the delete calendar confirmation dialog
+#[derive(Debug, Clone)]
+pub struct DeleteCalendarDialogState {
+    /// ID of the calendar to delete
+    pub calendar_id: String,
+    /// Name of the calendar (for display in confirmation)
+    pub calendar_name: String,
+}
+
 /// Main application state
 pub struct CosmicCalendar {
     pub core: Core,
@@ -26,8 +43,6 @@ pub struct CosmicCalendar {
     /// The anchor date shared by all views - when you select a date or switch views,
     /// all views sync to show the period containing this date
     pub selected_date: NaiveDate,
-    #[allow(dead_code)] // Will be used for event storage in future
-    pub storage: LocalStorage,
     pub calendar_manager: CalendarManager,
     pub show_sidebar: bool,
     /// Track previous condensed state to detect changes and sync sidebar
@@ -48,14 +63,20 @@ pub struct CosmicCalendar {
     pub selected_calendar_id: Option<String>,
     /// Quick event being edited: (date, event_text) - None when not editing
     pub quick_event_editing: Option<(NaiveDate, String)>,
+    /// Cached events for current month view, grouped by day
+    pub cached_month_events: std::collections::HashMap<u32, Vec<crate::components::DisplayEvent>>,
+    /// Color of the selected calendar (cached for quick event input)
+    pub selected_calendar_color: String,
+    /// New calendar dialog state - None when dialog is closed
+    pub new_calendar_dialog: Option<NewCalendarDialogState>,
+    /// Delete calendar confirmation dialog state - None when dialog is closed
+    pub delete_calendar_dialog: Option<DeleteCalendarDialogState>,
 }
 
 impl CosmicCalendar {
     /// Initialize the application with default calendars
     fn initialize_app(core: Core) -> Self {
         let today = chrono::Local::now().date_naive();
-        let storage_path = LocalStorage::get_storage_path();
-        let storage = LocalStorage::load_from_file(&storage_path).unwrap_or_default();
 
         let year = today.year();
         let month = today.month();
@@ -92,11 +113,20 @@ impl CosmicCalendar {
         // Mini calendar starts showing the current month
         let mini_calendar_state = CalendarState::new(year, month);
 
+        // Get selected calendar color (default to first calendar's color)
+        let selected_calendar_color = calendar_manager
+            .sources()
+            .first()
+            .map(|c| c.info().color.clone())
+            .unwrap_or_else(|| "#3B82F6".to_string());
+
+        // Cache events for current month
+        let cached_month_events = calendar_manager.get_display_events_for_month(year, month);
+
         CosmicCalendar {
             core,
             current_view: CalendarView::Month,
             selected_date: today,
-            storage,
             calendar_manager,
             show_sidebar: true,
             last_condensed: false, // Will be synced on first render
@@ -113,6 +143,10 @@ impl CosmicCalendar {
             key_binds,
             selected_calendar_id,
             quick_event_editing: None,
+            cached_month_events,
+            selected_calendar_color,
+            new_calendar_dialog: None,
+            delete_calendar_dialog: None,
         }
     }
 
@@ -137,6 +171,25 @@ impl CosmicCalendar {
 
         // Sync mini calendar to show the month containing selected_date
         self.mini_calendar_state = CalendarState::new(year, month);
+
+        // Refresh cached events for the new month
+        self.refresh_cached_events();
+    }
+
+    /// Refresh the cached events for the current month view
+    pub fn refresh_cached_events(&mut self) {
+        let cache_state = self.cache.current_state();
+        self.cached_month_events = self.calendar_manager
+            .get_display_events_for_month(cache_state.year, cache_state.month);
+    }
+
+    /// Update the selected calendar color cache
+    pub fn update_selected_calendar_color(&mut self) {
+        if let Some(ref cal_id) = self.selected_calendar_id {
+            if let Some(calendar) = self.calendar_manager.sources().iter().find(|c| &c.info().id == cal_id) {
+                self.selected_calendar_color = calendar.info().color.clone();
+            }
+        }
     }
 
     /// Set the selected date and sync all views
@@ -206,9 +259,27 @@ impl CosmicCalendar {
             }
         };
 
-        // For now, pass None for month events - we'll implement this properly later
-        // The architecture is in place, we just need to handle lifetimes better
-        views::render_main_content(&self.cache, &self.week_state, &self.day_state, &self.year_state, &self.locale, self.current_view, selected_day, self.settings.show_week_numbers, None)
+        // Build month events with quick event state if editing
+        let quick_event_data: Option<(chrono::NaiveDate, &str, &str)> = self.quick_event_editing
+            .as_ref()
+            .map(|(date, text)| (*date, text.as_str(), self.selected_calendar_color.as_str()));
+
+        let month_events = views::MonthViewEvents {
+            events_by_day: &self.cached_month_events,
+            quick_event: quick_event_data,
+        };
+
+        views::render_main_content(
+            &self.cache,
+            &self.week_state,
+            &self.day_state,
+            &self.year_state,
+            &self.locale,
+            self.current_view,
+            selected_day,
+            self.settings.show_week_numbers,
+            Some(month_events),
+        )
     }
 }
 

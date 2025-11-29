@@ -1,4 +1,5 @@
 use crate::app::CosmicCalendar;
+use crate::components::{render_delete_calendar_dialog, render_new_calendar_dialog};
 use crate::message::Message;
 use crate::styles;
 use crate::ui_constants::SIDEBAR_WIDTH;
@@ -24,11 +25,24 @@ pub fn render_layout(app: &CosmicCalendar) -> Element<'_, Message> {
     };
 
     // In condensed mode with sidebar toggled on, show it as overlay
-    if is_condensed && app.show_sidebar {
+    let with_sidebar = if is_condensed && app.show_sidebar {
         render_mobile_with_overlay(app, base_content)
     } else {
         base_content
+    };
+
+    // Show dialog overlays if any are open
+    if let Some(ref dialog_state) = app.new_calendar_dialog {
+        let dialog = render_new_calendar_dialog(dialog_state);
+        return stack![with_sidebar, dialog].into();
     }
+
+    if let Some(ref dialog_state) = app.delete_calendar_dialog {
+        let dialog = render_delete_calendar_dialog(dialog_state);
+        return stack![with_sidebar, dialog].into();
+    }
+
+    with_sidebar
 }
 
 /// Render desktop layout with inline sidebar

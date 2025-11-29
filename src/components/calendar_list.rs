@@ -1,12 +1,43 @@
 use cosmic::iced::Length;
-use cosmic::widget::{button, column, container, row};
+use cosmic::widget::{button, column, container, menu, row};
 use cosmic::{widget, Element};
+use std::collections::HashMap;
 
 use crate::calendars::CalendarSource;
 use crate::components::{render_color_indicator, render_quick_color_picker};
 use crate::fl;
 use crate::message::Message;
 use crate::ui_constants::{SPACING_MEDIUM, SPACING_SMALL, PADDING_MEDIUM, FONT_SIZE_BODY, PADDING_COLOR_PICKER_NESTED, COLOR_INDICATOR_SIZE};
+
+/// Context menu actions for calendar items - uses index to avoid Clone/Copy issues with String
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum CalendarContextAction {
+    Select(usize),
+    Delete(usize),
+}
+
+impl menu::Action for CalendarContextAction {
+    type Message = Message;
+
+    fn message(&self) -> Self::Message {
+        match self {
+            CalendarContextAction::Select(index) => Message::SelectCalendarByIndex(*index),
+            CalendarContextAction::Delete(index) => Message::DeleteCalendarByIndex(*index),
+        }
+    }
+}
+
+/// Build context menu items for a calendar by index
+fn calendar_context_menu(index: usize) -> Option<Vec<menu::Tree<Message>>> {
+    Some(menu::items(
+        &HashMap::new(),
+        vec![
+            menu::Item::Button(fl!("calendar-select"), None, CalendarContextAction::Select(index)),
+            menu::Item::Divider,
+            menu::Item::Button(fl!("calendar-delete"), None, CalendarContextAction::Delete(index)),
+        ],
+    ))
+}
 
 /// Render the list of calendars with checkboxes, color pickers, and selection
 pub fn render_calendar_list<'a>(
@@ -19,7 +50,7 @@ pub fn render_calendar_list<'a>(
         .padding(PADDING_MEDIUM)
         .push(widget::text::body(fl!("sidebar-calendars")).size(FONT_SIZE_BODY));
 
-    for calendar in calendars {
+    for (index, calendar) in calendars.iter().enumerate() {
         let info = calendar.info();
         let is_enabled = calendar.is_enabled();
         let is_picker_open = color_picker_open.map(|id| id == &info.id).unwrap_or(false);
@@ -57,7 +88,14 @@ pub fn render_calendar_list<'a>(
             .push(color_indicator)
             .push(name_button);
 
-        calendar_list = calendar_list.push(calendar_row);
+        // Wrap in context menu for right-click actions
+        let calendar_row_with_context = widget::context_menu(
+            calendar_row,
+            calendar_context_menu(index),
+        )
+        .on_surface_action(Message::Surface);
+
+        calendar_list = calendar_list.push(calendar_row_with_context);
 
         // Show inline color picker if this calendar's picker is open
         if is_picker_open {

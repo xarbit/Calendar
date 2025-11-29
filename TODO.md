@@ -29,10 +29,10 @@
   - `render_day_cell_with_events()` - Full day cell with event support
   - Double-click to start quick event creation
 
-- [x] **Event Storage Backend** - Persist events to disk
+- [x] **Event Storage Backend** - Persist events to SQLite database
   - `handle_commit_quick_event()` creates CalendarEvent with UUID
-  - Events stored via LocalCalendar → LocalStorage → JSON file
-  - Path: `~/.local/share/sol-calendar/calendars/{id}.json`
+  - Events stored via LocalCalendar → Database → SQLite
+  - Path: `~/.local/share/sol-calendar/sol.db`
 
 - [x] **Month View Events Structure** - Data passing for events
   - `MonthViewEvents` struct with events_by_day HashMap
@@ -40,18 +40,25 @@
 
 ### In Progress 🔄
 
-- [ ] **Wire Up Event Display** - Show events in month view
-  - Currently passing `None` for events to avoid lifetime issues
-  - Need to properly pass events from CalendarManager to view
-  - Issue: Lifetime management with borrowed data in render functions
+- [ ] **Testing Event Creation** - Verify events are created and persisted correctly
+  - Double-click on day to show quick event input
+  - Type event name and press Enter to save
+  - Check events persist across app restarts
+
+### Completed ✅ (Phase 1)
+
+- [x] **Wire Up Event Display** - Show events in month view
+  - Added `get_display_events_for_month()` to CalendarManager
+  - Caching events in app state (`cached_month_events`)
+  - Events refresh on navigation and after add/delete
+  - Lifetime issues resolved by owning data in app state
+
+- [x] **Basic Event Display**
+  - Display events in month view day cells
+  - Show quick event input when double-clicking a day
+  - Color events based on their calendar's color
 
 ### Pending 📋
-
-#### Phase 1: Basic Event Display
-- [ ] Fix lifetime issues in `render_main_content()` for event data
-- [ ] Display events in month view day cells
-- [ ] Show quick event input when double-clicking a day
-- [ ] Color events based on their calendar's color
 
 #### Phase 2: Event Interaction
 - [ ] Click on event chip to select/edit
@@ -93,7 +100,13 @@
 - [ ] Remove dead code warnings
 - [ ] Better error handling (replace eprintln with proper logging)
 - [ ] Add unit tests for event operations
-- [ ] Consider caching events in app state for better lifetime management
+- [x] ~~Consider caching events in app state for better lifetime management~~ (done)
+- [x] **Migrated event storage to SQLite with SQLCipher**
+  - Calendar metadata (name, color, enabled) stored in config file: `~/.config/sol-calendar/calendars.json`
+  - Events stored in SQLite database: `~/.local/share/sol-calendar/sol.db`
+  - Better separation of concerns (config vs data)
+  - Encryption support via SQLCipher for event data (ready to use)
+  - Efficient indexed queries for date ranges
 
 ---
 
@@ -101,7 +114,16 @@
 
 ### Event Flow
 ```
-User Action → Message → update.rs → CalendarManager → CalendarSource → Storage
+User Action → Message → update.rs → CalendarManager → CalendarSource → Database (SQLite)
+```
+
+### Storage Architecture
+```
+Calendar Metadata (config)     Events (database)
+~/.config/sol-calendar/    →   ~/.local/share/sol-calendar/
+├── calendars.json             └── sol.db (SQLite + SQLCipher)
+    ├── id, name, color
+    ├── enabled, type
 ```
 
 ### Key Files
@@ -111,6 +133,8 @@ User Action → Message → update.rs → CalendarManager → CalendarSource →
 - `src/components/day_cell.rs` - Day cell with event support
 - `src/views/month.rs` - Month view with `MonthViewEvents`
 - `src/calendars/` - Calendar backend (LocalCalendar, CalDAV)
+- `src/calendars/config.rs` - Calendar metadata (JSON config)
+- `src/database/` - SQLite database for events (with SQLCipher encryption support)
 
 ### Data Structures
 - `CalendarEvent` - Core event data (uid, summary, start, end, etc.)

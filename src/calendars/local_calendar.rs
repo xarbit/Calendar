@@ -1,26 +1,26 @@
 use super::calendar_source::{CalendarInfo, CalendarSource, CalendarType};
 use super::config::CalendarManagerConfig;
 use crate::caldav::CalendarEvent;
-use crate::storage::LocalStorage;
+use crate::database::Database;
 use std::error::Error;
-use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
 
-/// A local calendar stored on disk
+/// A local calendar stored in SQLite database (events) with JSON config (metadata)
 #[derive(Debug)]
 pub struct LocalCalendar {
     info: CalendarInfo,
-    storage: LocalStorage,
-    storage_path: PathBuf,
+    /// Shared database connection for events
+    db: Arc<Mutex<Database>>,
+    /// Cached events for this calendar (refreshed on fetch)
+    cached_events: Vec<CalendarEvent>,
 }
 
 impl LocalCalendar {
-    /// Create a new local calendar
-    pub fn new(id: String, name: String) -> Self {
+    /// Create a new local calendar with a shared database connection
+    pub fn new(id: String, name: String, db: Arc<Mutex<Database>>) -> Self {
         let mut info = CalendarInfo::new(id.clone(), name, CalendarType::Local);
-        let storage_path = Self::get_calendar_path(&id);
-        let storage = LocalStorage::load_from_file(&storage_path).unwrap_or_default();
 
-        // Load saved configuration if it exists
+        // Load calendar metadata from config file if it exists
         if let Ok(config) = CalendarManagerConfig::load() {
             if let Some(saved) = config.get_calendar(&id) {
                 info.name = saved.name.clone();
@@ -29,53 +29,67 @@ impl LocalCalendar {
             }
         }
 
-        LocalCalendar {
+        let mut calendar = LocalCalendar {
             info,
-            storage,
-            storage_path,
-        }
+            db,
+            cached_events: Vec::new(),
+        };
+
+        // Load events from database
+        calendar.load_events_from_db();
+
+        calendar
     }
 
-    /// Create a local calendar with a custom color (used for defaults)
-    pub fn with_color(id: String, name: String, color: String) -> Self {
-        let mut calendar = Self::new(id.clone(), name);
+    /// Create a local calendar with a custom color
+    pub fn with_color(id: String, name: String, color: String, db: Arc<Mutex<Database>>) -> Self {
+        let mut calendar = Self::new(id.clone(), name, db);
 
-        // Only set the default color if no saved config exists
-        let has_saved_config = CalendarManagerConfig::load()
-            .ok()
-            .map(|cfg| cfg.get_calendar(&id).is_some())
-            .unwrap_or(false);
+        // Check if calendar config already exists
+        let config = CalendarManagerConfig::load().unwrap_or_default();
+        let exists = config.get_calendar(&id).is_some();
 
-        if !has_saved_config {
+        if !exists {
+            // Set default color for new calendar
             calendar.info.color = color;
         }
 
         calendar
     }
 
-    /// Get the file path for a calendar by ID
-    fn get_calendar_path(id: &str) -> PathBuf {
-        let mut path = dirs::data_local_dir().unwrap_or_else(|| PathBuf::from("."));
-        path.push("sol-calendar");
-        path.push("calendars");
-        std::fs::create_dir_all(&path).ok();
-        path.push(format!("{}.json", id));
-        path
+    /// Load events from database into cache
+    fn load_events_from_db(&mut self) {
+        if let Ok(db) = self.db.lock() {
+            if let Ok(events) = db.get_events_for_calendar(&self.info.id) {
+                self.cached_events = events;
+            }
+        }
     }
 
-    /// Get all events from this calendar
+    /// Get all events from this calendar (uses cache)
     pub fn get_events(&self) -> &[CalendarEvent] {
-        self.storage.get_events()
+        &self.cached_events
     }
 
     /// Get events for a specific date
     pub fn get_events_for_date(&self, date: chrono::NaiveDate) -> Vec<&CalendarEvent> {
-        self.storage.get_events_for_date(date)
+        use chrono::Datelike;
+        self.cached_events
+            .iter()
+            .filter(|e| e.start.date_naive() == date)
+            .collect()
     }
 
     /// Get events for a specific month
     pub fn get_events_for_month(&self, year: i32, month: u32) -> Vec<&CalendarEvent> {
-        self.storage.get_events_for_month(year, month)
+        use chrono::Datelike;
+        self.cached_events
+            .iter()
+            .filter(|e| {
+                let date = e.start.date_naive();
+                date.year() == year && date.month() == month
+            })
+            .collect()
     }
 }
 
@@ -89,27 +103,41 @@ impl CalendarSource for LocalCalendar {
     }
 
     fn fetch_events(&self) -> Result<Vec<CalendarEvent>, Box<dyn Error>> {
-        Ok(self.storage.get_events().to_vec())
+        Ok(self.cached_events.clone())
     }
 
     fn add_event(&mut self, event: CalendarEvent) -> Result<(), Box<dyn Error>> {
-        self.storage.add_event(event);
+        if let Ok(db) = self.db.lock() {
+            db.insert_event(&self.info.id, &event)?;
+        }
+        // Update cache
+        self.cached_events.push(event);
         Ok(())
     }
 
     fn update_event(&mut self, event: CalendarEvent) -> Result<(), Box<dyn Error>> {
-        self.storage.update_event(event);
+        if let Ok(db) = self.db.lock() {
+            db.update_event(&event)?;
+        }
+        // Update cache
+        if let Some(existing) = self.cached_events.iter_mut().find(|e| e.uid == event.uid) {
+            *existing = event;
+        }
         Ok(())
     }
 
     fn delete_event(&mut self, uid: &str) -> Result<(), Box<dyn Error>> {
-        self.storage.remove_event(uid);
+        if let Ok(db) = self.db.lock() {
+            db.delete_event(uid)?;
+        }
+        // Update cache
+        self.cached_events.retain(|e| e.uid != uid);
         Ok(())
     }
 
     fn sync(&mut self) -> Result<(), Box<dyn Error>> {
-        // For local calendars, sync means saving to disk
-        self.storage.save_to_file(&self.storage_path)?;
+        // Refresh event cache from database
+        self.load_events_from_db();
         Ok(())
     }
 

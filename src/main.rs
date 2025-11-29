@@ -4,6 +4,7 @@ mod caldav;
 mod calendars;
 mod color_constants;
 mod components;
+mod database;
 mod keyboard;
 mod layout;
 mod layout_constants;

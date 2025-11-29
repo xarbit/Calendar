@@ -1,6 +1,6 @@
 use chrono::NaiveDate;
 use cosmic::iced::{alignment, Length};
-use cosmic::widget::{column, container, mouse_area, row};
+use cosmic::widget::{column, container, mouse_area};
 use cosmic::{widget, Element};
 
 use crate::components::{render_events_column, render_quick_event_input, DisplayEvent};
