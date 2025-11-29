@@ -1,5 +1,5 @@
-use cosmic::iced::{alignment, Border, Length};
-use cosmic::widget::{column, container, row};
+use cosmic::iced::{alignment, Border, Length, Size};
+use cosmic::widget::{column, container, row, scrollable, responsive};
 use cosmic::{widget, Element};
 
 use crate::locale::LocalePreferences;
@@ -7,59 +7,101 @@ use crate::localized_names;
 use crate::message::Message;
 use crate::models::YearState;
 use crate::ui_constants::{
-    FONT_SIZE_SMALL, FONT_SIZE_MEDIUM, FONT_SIZE_LARGE, PADDING_SMALL, PADDING_TINY,
-    SPACING_SMALL, SPACING_MEDIUM, SPACING_TINY, SPACING_XXS, COLOR_DAY_CELL_BORDER, BORDER_WIDTH_THIN
+    FONT_SIZE_SMALL, PADDING_SMALL, PADDING_MEDIUM, PADDING_TINY,
+    SPACING_MEDIUM, SPACING_SMALL, SPACING_XXS, COLOR_DAY_CELL_BORDER, BORDER_WIDTH_THIN
 };
 
-pub fn render_year_view(year_state: &YearState, locale: &LocalePreferences) -> Element<'static, Message> {
+// Fixed size for square month boxes - ensures all 6 weeks + header + month name are visible
+const MONTH_BOX_SIZE: f32 = 220.0;
+
+pub fn render_year_view(year_state: &YearState, _locale: &LocalePreferences) -> Element<'static, Message> {
+    // Clone data needed for the closure
+    let months = year_state.months.clone();
+    let today = year_state.today;
+    let year = year_state.year;
+
+    responsive(move |size: Size| {
+        let num_columns = calculate_columns(size.width);
+        render_year_grid(&months, today, year, num_columns)
+    })
+    .into()
+}
+
+/// Calculate optimal number of columns based on available width
+fn calculate_columns(available_width: f32) -> usize {
+    let spacing = SPACING_MEDIUM as f32;
+    let padding = PADDING_MEDIUM as f32 * 2.0;
+
+    let usable_width = available_width - padding + spacing;
+    let column_width = MONTH_BOX_SIZE + spacing;
+    let columns = (usable_width / column_width).floor() as usize;
+
+    columns.clamp(1, 4)
+}
+
+/// Render the year grid with specified number of columns
+fn render_year_grid(
+    months: &[crate::models::CalendarState],
+    today: (i32, u32, u32),
+    year: i32,
+    num_columns: usize,
+) -> Element<'static, Message> {
     let mut year_layout = column()
         .spacing(SPACING_MEDIUM)
-        .padding(PADDING_SMALL)
-        .width(Length::Fill)
-        .height(Length::Fill);
+        .padding(PADDING_MEDIUM);
 
-    // Create a 3x4 grid of month mini-calendars (4 rows of 3 months each)
-    for row_index in 0..4 {
-        let mut month_row = row()
-            .spacing(SPACING_MEDIUM)
-            .width(Length::Fill)
-            .height(Length::Fill);
+    // Create rows based on the number of columns
+    let mut month_index = 0;
+    while month_index < 12 {
+        let mut month_row = row().spacing(SPACING_MEDIUM);
 
-        for col_index in 0..3 {
-            let month_index = row_index * 3 + col_index;
+        for _ in 0..num_columns {
             if month_index < 12 {
-                let month_calendar = render_mini_month(&year_state.months[month_index], year_state, locale, month_index + 1);
+                let month_calendar = render_mini_month(
+                    &months[month_index],
+                    today,
+                    year,
+                    month_index + 1,
+                );
                 month_row = month_row.push(month_calendar);
+                month_index += 1;
             }
         }
 
         year_layout = year_layout.push(month_row);
     }
 
-    container(year_layout)
-        .width(Length::Fill)
-        .height(Length::Fill)
-        .into()
+    // Center the grid and allow vertical scrolling
+    scrollable(
+        container(year_layout)
+            .width(Length::Fill)
+            .center_x(Length::Fill)
+    )
+    .width(Length::Fill)
+    .height(Length::Fill)
+    .into()
 }
 
 /// Render a single mini month calendar for the year view
 fn render_mini_month(
     month_state: &crate::models::CalendarState,
-    year_state: &YearState,
-    _locale: &LocalePreferences,
+    today: (i32, u32, u32),
+    year: i32,
     month: usize,
 ) -> Element<'static, Message> {
     let mut mini_calendar = column()
-        .spacing(SPACING_TINY)
+        .spacing(SPACING_SMALL)
         .padding(PADDING_SMALL)
-        .width(Length::Fill);
+        .width(Length::Fixed(MONTH_BOX_SIZE))
+        .height(Length::Fixed(MONTH_BOX_SIZE));
 
     // Month name header
     let month_name = localized_names::get_month_name(month as u32);
     mini_calendar = mini_calendar.push(
-        container(widget::text(month_name).size(FONT_SIZE_LARGE))
+        container(widget::text::title4(month_name))
             .width(Length::Fill)
             .center_x(Length::Fill)
+            .padding([0, 0, PADDING_SMALL, 0])
     );
 
     // Weekday headers (abbreviated, single letter for space)
@@ -80,7 +122,7 @@ fn render_mini_month(
         let mut week_row = row().spacing(SPACING_XXS);
         for day_opt in week {
             if let Some(day) = day_opt {
-                let is_today = year_state.today == (year_state.year, month as u32, *day);
+                let is_today = today == (year, month as u32, *day);
 
                 let day_container = if is_today {
                     container(widget::text(format!("{}", day)).size(FONT_SIZE_SMALL))
@@ -122,8 +164,8 @@ fn render_mini_month(
     }
 
     container(mini_calendar)
-        .width(Length::Fill)
-        .height(Length::Fill)
+        .width(Length::Fixed(MONTH_BOX_SIZE))
+        .height(Length::Fixed(MONTH_BOX_SIZE))
         .style(|_theme: &cosmic::Theme| {
             container::Style {
                 border: Border {
