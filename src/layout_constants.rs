@@ -3,7 +3,7 @@
 // Layout dimensions
 pub const SIDEBAR_WIDTH: f32 = 280.0;
 pub const MINI_CALENDAR_DAY_BUTTON_SIZE: f32 = 32.0;
-pub const MINI_CALENDAR_GRID_HEIGHT: f32 = 250.0; // Fixed height for 6 weeks + header row
+pub const MINI_CALENDAR_GRID_HEIGHT: f32 = 210.0; // Fixed height for 5 weeks + header row
 
 // Calendar view dimensions
 pub const HOUR_ROW_HEIGHT: f32 = 60.0; // Height of each hour slot in week/day views
