@@ -192,6 +192,11 @@ pub fn handle_message(app: &mut CosmicCalendar, message: Message) -> Task<Messag
         Message::OpenEditEventDialog(uid) => {
             handle_open_edit_event_dialog(app, uid);
         }
+        Message::EventDialogToggleEdit(field, editing) => {
+            if let Some(ref mut dialog) = app.event_dialog {
+                dialog.editing_field = if editing { Some(field) } else { None };
+            }
+        }
         Message::EventDialogTitleChanged(title) => {
             if let Some(ref mut dialog) = app.event_dialog {
                 dialog.title = title;
@@ -346,9 +351,9 @@ pub fn handle_message(app: &mut CosmicCalendar, message: Message) -> Task<Messag
                 dialog.url = url;
             }
         }
-        Message::EventDialogNotesChanged(notes) => {
+        Message::EventDialogNotesAction(action) => {
             if let Some(ref mut dialog) = app.event_dialog {
-                dialog.notes = notes;
+                dialog.notes_content.perform(action);
             }
         }
         Message::ConfirmEventDialog => {

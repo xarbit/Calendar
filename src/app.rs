@@ -11,7 +11,7 @@ use crate::views::{self, CalendarView};
 use chrono::{Datelike, NaiveDate};
 use cosmic::app::Core;
 use cosmic::iced::keyboard;
-use cosmic::widget::{about, menu};
+use cosmic::widget::{about, menu, text_editor};
 use cosmic::widget::menu::Action as _; // Import trait for .message() method
 use cosmic::{Application, Element};
 use std::collections::HashMap;
@@ -50,8 +50,19 @@ pub struct DeleteCalendarDialogState {
     pub calendar_name: String,
 }
 
+/// Enum for which field is being edited in the event dialog
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EventDialogField {
+    Title,
+    Location,
+    StartDate,
+    StartTime,
+    EndDate,
+    EndTime,
+    Url,
+}
+
 /// State for the event dialog (Create or Edit)
-#[derive(Debug, Clone)]
 pub struct EventDialogState {
     /// Event UID (None for new events, Some for editing)
     pub editing_uid: Option<String>,
@@ -95,8 +106,10 @@ pub struct EventDialogState {
     pub attachments: Vec<String>,
     /// URL associated with the event
     pub url: String,
-    /// Notes/description
-    pub notes: String,
+    /// Notes/description content (for text_editor widget)
+    pub notes_content: text_editor::Content,
+    /// Which field is currently being edited (None = no field in edit mode)
+    pub editing_field: Option<EventDialogField>,
 }
 
 /// Main application state

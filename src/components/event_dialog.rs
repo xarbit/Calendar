@@ -1,11 +1,12 @@
 //! Event dialog component for creating and editing events
-//! Uses COSMIC settings-style grouped sections
+//! Uses COSMIC settings-style grouped sections with editable_input
 
 use cosmic::iced::Length;
-use cosmic::widget::{button, column, container, row, scrollable, settings, text, text_input, toggler};
+use cosmic::widget::{button, column, container, row, scrollable, settings, text, text_editor, toggler};
+use cosmic::widget::editable_input;
 use cosmic::{widget, Element};
 
-use crate::app::EventDialogState;
+use crate::app::{EventDialogField, EventDialogState};
 use crate::caldav::{AlertTime, RepeatFrequency, TravelTime};
 use crate::calendars::CalendarSource;
 use crate::fl;
@@ -72,16 +73,30 @@ pub fn render_event_dialog<'a>(
         fl!("event-new")
     };
 
-    // === Title Input (prominent, at top) ===
-    let title_input = text_input(fl!("event-title-placeholder"), &state.title)
-        .on_input(Message::EventDialogTitleChanged)
-        .width(Length::Fill)
-        .size(16);
+    // Helper to check if a field is being edited
+    let is_editing = |field: EventDialogField| -> bool {
+        state.editing_field == Some(field)
+    };
 
-    // === Basic Info Section ===
-    let location_input = text_input(fl!("event-location-placeholder"), &state.location)
-        .on_input(Message::EventDialogLocationChanged)
-        .width(Length::Fill);
+    // === Title Input using editable_input ===
+    let title_input = editable_input(
+        fl!("event-title-placeholder"),
+        &state.title,
+        is_editing(EventDialogField::Title),
+        |editing| Message::EventDialogToggleEdit(EventDialogField::Title, editing),
+    )
+    .on_input(Message::EventDialogTitleChanged)
+    .width(Length::Fill);
+
+    // === Location Input using editable_input ===
+    let location_input = editable_input(
+        fl!("event-location-placeholder"),
+        &state.location,
+        is_editing(EventDialogField::Location),
+        |editing| Message::EventDialogToggleEdit(EventDialogField::Location, editing),
+    )
+    .on_input(Message::EventDialogLocationChanged)
+    .width(Length::Fill);
 
     let basic_section = settings::section()
         .add(
@@ -97,21 +112,45 @@ pub fn render_event_dialog<'a>(
     let all_day_toggler = toggler(state.all_day)
         .on_toggle(Message::EventDialogAllDayToggled);
 
-    let start_date_input = text_input("YYYY-MM-DD", &state.start_date_input)
-        .on_input(Message::EventDialogStartDateInputChanged)
-        .width(Length::Fixed(120.0));
+    // Start date using editable_input
+    let start_date_input = editable_input(
+        "YYYY-MM-DD",
+        &state.start_date_input,
+        is_editing(EventDialogField::StartDate),
+        |editing| Message::EventDialogToggleEdit(EventDialogField::StartDate, editing),
+    )
+    .on_input(Message::EventDialogStartDateInputChanged)
+    .width(Length::Fixed(140.0));
 
-    let start_time_input = text_input("HH:MM", &state.start_time_input)
-        .on_input(Message::EventDialogStartTimeInputChanged)
-        .width(Length::Fixed(70.0));
+    // Start time using editable_input
+    let start_time_input = editable_input(
+        "HH:MM",
+        &state.start_time_input,
+        is_editing(EventDialogField::StartTime),
+        |editing| Message::EventDialogToggleEdit(EventDialogField::StartTime, editing),
+    )
+    .on_input(Message::EventDialogStartTimeInputChanged)
+    .width(Length::Fixed(100.0));
 
-    let end_date_input = text_input("YYYY-MM-DD", &state.end_date_input)
-        .on_input(Message::EventDialogEndDateInputChanged)
-        .width(Length::Fixed(120.0));
+    // End date using editable_input
+    let end_date_input = editable_input(
+        "YYYY-MM-DD",
+        &state.end_date_input,
+        is_editing(EventDialogField::EndDate),
+        |editing| Message::EventDialogToggleEdit(EventDialogField::EndDate, editing),
+    )
+    .on_input(Message::EventDialogEndDateInputChanged)
+    .width(Length::Fixed(140.0));
 
-    let end_time_input = text_input("HH:MM", &state.end_time_input)
-        .on_input(Message::EventDialogEndTimeInputChanged)
-        .width(Length::Fixed(70.0));
+    // End time using editable_input
+    let end_time_input = editable_input(
+        "HH:MM",
+        &state.end_time_input,
+        is_editing(EventDialogField::EndTime),
+        |editing| Message::EventDialogToggleEdit(EventDialogField::EndTime, editing),
+    )
+    .on_input(Message::EventDialogEndTimeInputChanged)
+    .width(Length::Fixed(100.0));
 
     let starts_row = if state.all_day {
         row().spacing(8).push(start_date_input)
@@ -293,10 +332,15 @@ pub fn render_event_dialog<'a>(
         );
     }
 
-    let invitee_input = text_input(fl!("event-invitee-placeholder"), &state.invitee_input)
-        .on_input(Message::EventDialogInviteeInputChanged)
-        .on_submit(|_| Message::EventDialogAddInvitee)
-        .width(Length::Fill);
+    let invitee_input = editable_input(
+        fl!("event-invitee-placeholder"),
+        &state.invitee_input,
+        true, // Always editable for input
+        |_| Message::EventDialogAddInvitee, // Toggle acts as submit
+    )
+    .on_input(Message::EventDialogInviteeInputChanged)
+    .on_submit(|_| Message::EventDialogAddInvitee)
+    .width(Length::Fill);
 
     let invitees_content = column()
         .spacing(4)
@@ -308,13 +352,20 @@ pub fn render_event_dialog<'a>(
         .add(settings::item::builder(fl!("event-invitees")).control(invitees_content));
 
     // === Additional Info Section ===
-    let url_input = text_input(fl!("event-url-placeholder"), &state.url)
-        .on_input(Message::EventDialogUrlChanged)
-        .width(Length::Fill);
+    let url_input = editable_input(
+        fl!("event-url-placeholder"),
+        &state.url,
+        is_editing(EventDialogField::Url),
+        |editing| Message::EventDialogToggleEdit(EventDialogField::Url, editing),
+    )
+    .on_input(Message::EventDialogUrlChanged)
+    .width(Length::Fill);
 
-    let notes_input = text_input(fl!("event-notes-placeholder"), &state.notes)
-        .on_input(Message::EventDialogNotesChanged)
-        .width(Length::Fill);
+    // Notes uses text_editor for multi-line input
+    let notes_editor = text_editor(&state.notes_content)
+        .placeholder(fl!("event-notes-placeholder"))
+        .on_action(Message::EventDialogNotesAction)
+        .height(Length::Fixed(100.0));
 
     let additional_section = settings::section()
         .title(fl!("event-additional-section"))
@@ -324,7 +375,7 @@ pub fn render_event_dialog<'a>(
         )
         .add(
             settings::item::builder(fl!("event-notes"))
-                .control(notes_input),
+                .control(notes_editor),
         );
 
     // === Dialog Buttons ===

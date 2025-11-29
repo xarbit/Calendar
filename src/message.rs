@@ -1,6 +1,8 @@
 use chrono::{NaiveDate, NaiveTime};
+use crate::app::EventDialogField;
 use crate::caldav::{AlertTime, RepeatFrequency, TravelTime};
 use crate::views::CalendarView;
+use cosmic::widget::text_editor;
 
 #[derive(Debug, Clone)]
 pub enum Message {
@@ -72,6 +74,8 @@ pub enum Message {
     OpenNewEventDialog,
     /// Open the event dialog for editing an existing event
     OpenEditEventDialog(String),
+    /// Toggle edit mode for a specific field
+    EventDialogToggleEdit(EventDialogField, bool),
     /// Update event title in dialog
     EventDialogTitleChanged(String),
     /// Update event location in dialog
@@ -116,8 +120,8 @@ pub enum Message {
     EventDialogRemoveAttachment(usize),
     /// Update URL in dialog
     EventDialogUrlChanged(String),
-    /// Update notes in dialog
-    EventDialogNotesChanged(String),
+    /// Handle text editor action for notes
+    EventDialogNotesAction(text_editor::Action),
     /// Confirm the event dialog (Create or Save)
     ConfirmEventDialog,
     /// Cancel the event dialog

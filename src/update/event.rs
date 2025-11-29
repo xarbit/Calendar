@@ -1,6 +1,7 @@
 //! Event management handlers (quick events and event dialog)
 
 use chrono::{NaiveDate, NaiveTime, TimeZone, Utc};
+use cosmic::widget::text_editor;
 use uuid::Uuid;
 
 use crate::app::{CosmicCalendar, EventDialogState};
@@ -149,7 +150,8 @@ pub fn handle_open_new_event_dialog(app: &mut CosmicCalendar) {
         alert_second: None,
         attachments: vec![],
         url: String::new(),
-        notes: String::new(),
+        notes_content: text_editor::Content::new(),
+        editing_field: None,
     });
 }
 
@@ -207,7 +209,8 @@ pub fn handle_open_edit_event_dialog(app: &mut CosmicCalendar, uid: String) {
         alert_second: event.alert_second,
         attachments: event.attachments,
         url: event.url.unwrap_or_default(),
-        notes: event.notes.unwrap_or_default(),
+        notes_content: text_editor::Content::with_text(&event.notes.unwrap_or_default()),
+        editing_field: None,
     });
 }
 
@@ -263,10 +266,13 @@ pub fn handle_confirm_event_dialog(app: &mut CosmicCalendar) {
         } else {
             Some(dialog.url)
         },
-        notes: if dialog.notes.is_empty() {
-            None
-        } else {
-            Some(dialog.notes)
+        notes: {
+            let notes_text = dialog.notes_content.text();
+            if notes_text.trim().is_empty() {
+                None
+            } else {
+                Some(notes_text)
+            }
         },
     };
 
