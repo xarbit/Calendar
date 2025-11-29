@@ -6,6 +6,7 @@ mod components;
 mod layout;
 mod locale;
 mod localize;
+mod localized_names;
 mod menu_action;
 mod message;
 mod models;

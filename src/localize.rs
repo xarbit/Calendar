@@ -12,7 +12,16 @@ lazy_static::lazy_static! {
     pub static ref LANGUAGE_LOADER: FluentLanguageLoader = {
         let loader = fluent_language_loader!();
         let requested_languages = DesktopLanguageRequester::requested_languages();
-        i18n_embed::select(&loader, &Localizations, &requested_languages).unwrap();
+
+        // Debug: Print requested languages
+        eprintln!("Requested languages: {:?}", requested_languages);
+
+        if let Err(e) = i18n_embed::select(&loader, &Localizations, &requested_languages) {
+            eprintln!("Failed to load requested locale, falling back to English: {:?}", e);
+        }
+
+        eprintln!("Selected language: {:?}", loader.current_languages());
+
         loader
     };
 }

@@ -3,12 +3,14 @@ use cosmic::widget::{column, container, row};
 use cosmic::{widget, Element};
 
 use crate::components::render_day_cell;
+use crate::fl;
 use crate::locale::LocalePreferences;
+use crate::localized_names;
 use crate::message::Message;
 use crate::models::CalendarState;
 use crate::ui_constants::{
     FONT_SIZE_MEDIUM, FONT_SIZE_SMALL, PADDING_SMALL, PADDING_MONTH_GRID,
-    SPACING_TINY, WEEKDAYS_FULL, WEEK_NUMBER_WIDTH
+    SPACING_TINY, WEEK_NUMBER_WIDTH
 };
 
 pub fn render_month_view(
@@ -25,7 +27,7 @@ pub fn render_month_view(
     // Week number header (only if enabled)
     if show_week_numbers {
         header_row = header_row.push(
-            container(widget::text("Wk").size(FONT_SIZE_SMALL))
+            container(widget::text(fl!("week-abbr")).size(FONT_SIZE_SMALL))
                 .width(Length::Fixed(WEEK_NUMBER_WIDTH))
                 .padding(PADDING_SMALL)
                 .align_y(alignment::Vertical::Center)
@@ -33,7 +35,8 @@ pub fn render_month_view(
     }
 
     // Weekday headers - use iterator to avoid repetition
-    for weekday in WEEKDAYS_FULL {
+    let weekday_names = localized_names::get_weekday_names_full();
+    for weekday in weekday_names {
         header_row = header_row.push(
             container(widget::text(weekday).size(FONT_SIZE_MEDIUM))
                 .width(Length::Fill)

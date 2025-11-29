@@ -3,6 +3,7 @@ use cosmic::{widget, Element};
 
 use crate::calendars::CalendarSource;
 use crate::components::{render_color_indicator, render_quick_color_picker};
+use crate::fl;
 use crate::message::Message;
 use crate::ui_constants::{SPACING_MEDIUM, PADDING_MEDIUM, FONT_SIZE_BODY, PADDING_COLOR_PICKER_NESTED, COLOR_INDICATOR_SIZE};
 
@@ -14,7 +15,7 @@ pub fn render_calendar_list<'a>(
     let mut calendar_list = column()
         .spacing(SPACING_MEDIUM)
         .padding(PADDING_MEDIUM)
-        .push(widget::text::body("Calendars").size(FONT_SIZE_BODY));
+        .push(widget::text::body(fl!("sidebar-calendars")).size(FONT_SIZE_BODY));
 
     for calendar in calendars {
         let info = calendar.info();

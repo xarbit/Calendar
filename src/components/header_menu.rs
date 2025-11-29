@@ -3,6 +3,7 @@ use cosmic::{widget, Element};
 use cosmic::app::Core;
 use std::collections::HashMap;
 
+use crate::fl;
 use crate::menu_action::MenuAction;
 use crate::message::Message;
 use crate::ui_constants::{ICON_SEARCH, ICON_SIDEBAR_OPEN, ICON_SIDEBAR_CLOSED, MENU_ITEM_HEIGHT, MENU_ITEM_WIDTH, MENU_SPACING};
@@ -36,20 +37,20 @@ pub fn render_header_start<'a>(
                 widget::Id::new(MENU_ID),
                 Message::Surface,
                 vec![
-                    ("File", vec![
-                        menu::Item::Button("New Event...", None, MenuAction::NewEvent),
+                    (fl!("menu-file"), vec![
+                        menu::Item::Button(fl!("menu-new-event"), None, MenuAction::NewEvent),
                     ]),
-                    ("Edit", vec![
-                        menu::Item::Button("Settings...", None, MenuAction::Settings),
+                    (fl!("menu-edit"), vec![
+                        menu::Item::Button(fl!("menu-settings"), None, MenuAction::Settings),
                     ]),
-                    ("View", vec![
-                        menu::Item::Button("Month View", None, MenuAction::ViewMonth),
-                        menu::Item::Button("Week View", None, MenuAction::ViewWeek),
-                        menu::Item::Button("Day View", None, MenuAction::ViewDay),
+                    (fl!("menu-view"), vec![
+                        menu::Item::Button(fl!("menu-month-view"), None, MenuAction::ViewMonth),
+                        menu::Item::Button(fl!("menu-week-view"), None, MenuAction::ViewWeek),
+                        menu::Item::Button(fl!("menu-day-view"), None, MenuAction::ViewDay),
                         menu::Item::Divider,
-                        menu::Item::CheckBox("Show Week Numbers", None, show_week_numbers, MenuAction::ToggleWeekNumbers),
+                        menu::Item::CheckBox(fl!("menu-show-week-numbers"), None, show_week_numbers, MenuAction::ToggleWeekNumbers),
                         menu::Item::Divider,
-                        menu::Item::Button("About Sol Calendar", None, MenuAction::About),
+                        menu::Item::Button(fl!("menu-about"), None, MenuAction::About),
                     ]),
                 ],
             ),

@@ -2,12 +2,13 @@ use cosmic::iced::Length;
 use cosmic::widget::{button, column, container, row};
 use cosmic::{widget, Element};
 
+use crate::localized_names;
 use crate::message::Message;
 use crate::models::CalendarState;
 use crate::ui_constants::{
     SPACING_MEDIUM, SPACING_XXS, SPACING_SMALL, SPACING_MINI_CALENDAR,
     PADDING_TINY, FONT_SIZE_SMALL, FONT_SIZE_BODY, MINI_CALENDAR_DAY_BUTTON_SIZE,
-    ICON_PREVIOUS, ICON_NEXT, WEEKDAYS_SHORT
+    ICON_PREVIOUS, ICON_NEXT
 };
 
 pub fn render_mini_calendar(
@@ -34,7 +35,8 @@ pub fn render_mini_calendar(
 
     // Weekday headers (abbreviated)
     let mut header_row = row().spacing(SPACING_XXS);
-    for weekday in WEEKDAYS_SHORT {
+    let weekday_names = localized_names::get_weekday_names_short();
+    for weekday in weekday_names {
         header_row = header_row.push(widget::text(weekday).width(Length::Fill).size(FONT_SIZE_SMALL));
     }
 

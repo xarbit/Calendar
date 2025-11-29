@@ -4,6 +4,7 @@ use cosmic::widget::{column, container, row, scrollable};
 use cosmic::{widget, Element};
 
 use crate::locale::LocalePreferences;
+use crate::localized_names;
 use crate::message::Message;
 use crate::models::WeekState;
 use crate::ui_constants::{
@@ -43,7 +44,7 @@ fn render_all_day_section(week_state: &WeekState, locale: &LocalePreferences) ->
     for date in week_state.days.clone() {
         let is_today = week_state.is_today(&date);
         let is_weekend = locale.is_weekend(date.weekday());
-        let day_name = format!("{}", date.format("%a"));
+        let day_name = localized_names::get_weekday_short(date.weekday());
         let day_number = format!("{}", date.format("%d"));
 
         let day_number_container = if is_today {

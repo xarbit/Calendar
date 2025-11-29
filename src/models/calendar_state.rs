@@ -1,4 +1,5 @@
 use chrono::Datelike;
+use crate::localized_names;
 
 /// Cached calendar state to avoid recalculating on every render
 #[derive(Debug, Clone, PartialEq)]
@@ -50,7 +51,8 @@ impl CalendarState {
         }
 
         let today = chrono::Local::now();
-        let month_year_text = format!("{}", first_day.format("%B %Y"));
+        let month_name = localized_names::get_month_name(month);
+        let month_year_text = format!("{} {}", month_name, year);
 
         CalendarState {
             year,

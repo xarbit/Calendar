@@ -1,5 +1,6 @@
 use chrono::{Datelike, NaiveDate};
 use crate::locale::LocalePreferences;
+use crate::localized_names;
 
 /// Cached day state for day view
 #[derive(Debug, Clone, PartialEq)]
@@ -16,7 +17,7 @@ impl DayState {
     pub fn new(date: NaiveDate, locale: &LocalePreferences) -> Self {
         let today = chrono::Local::now().date_naive();
 
-        let day_text = format!("{}", date.format("%A")); // "Monday"
+        let day_text = localized_names::get_weekday_full(date.weekday()); // "Monday"
         let date_number = format!("{}", date.format("%d")); // "15"
 
         // Use locale-aware date formatting for the header

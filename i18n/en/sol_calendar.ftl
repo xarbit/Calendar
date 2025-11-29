@@ -5,6 +5,15 @@ app-title = Sol Calendar
 app-description = A calendar application for the COSMIC Desktop
 
 # Menu items
+menu-file = File
+menu-edit = Edit
+menu-view = View
+menu-new-event = New Event...
+menu-settings = Settings...
+menu-month-view = Month View
+menu-week-view = Week View
+menu-day-view = Day View
+menu-show-week-numbers = Show Week Numbers
 menu-about = About Sol Calendar
 menu-quit = Quit
 
@@ -21,6 +30,9 @@ nav-next = Next
 # Sidebar
 sidebar-calendars = Calendars
 sidebar-mini-calendar = Mini Calendar
+
+# Week number
+week-abbr = Wk
 
 # Calendar actions
 calendar-add = Add Calendar
