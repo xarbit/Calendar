@@ -2,9 +2,9 @@ use cosmic::widget::{column, container, row};
 use cosmic::{widget, Element};
 
 use crate::calendars::CalendarSource;
-use crate::components::{render_color_indicator, render_quick_color_picker, COLOR_INDICATOR_SIZE};
+use crate::components::{render_color_indicator, render_quick_color_picker};
 use crate::message::Message;
-use crate::ui_constants::{SPACING_MEDIUM, PADDING_MEDIUM, FONT_SIZE_BODY, PADDING_COLOR_PICKER_NESTED};
+use crate::ui_constants::{SPACING_MEDIUM, PADDING_MEDIUM, FONT_SIZE_BODY, PADDING_COLOR_PICKER_NESTED, COLOR_INDICATOR_SIZE};
 
 /// Render the list of calendars with checkboxes and color pickers
 pub fn render_calendar_list<'a>(

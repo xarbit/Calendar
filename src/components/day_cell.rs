@@ -3,7 +3,7 @@ use cosmic::widget::{container, mouse_area};
 use cosmic::{widget, Element};
 
 use crate::message::Message;
-use crate::ui_constants::{BORDER_RADIUS, PADDING_DAY_CELL, COLOR_DAY_CELL_BORDER, COLOR_WEEKEND_BACKGROUND};
+use crate::ui_constants::{BORDER_RADIUS, PADDING_DAY_CELL, COLOR_DAY_CELL_BORDER, COLOR_WEEKEND_BACKGROUND, BORDER_WIDTH_HIGHLIGHT, BORDER_WIDTH_NORMAL};
 
 pub fn render_day_cell(
     day: u32,
@@ -30,7 +30,7 @@ pub fn render_day_cell(
                 background: None,
                 border: Border {
                     color: theme.cosmic().accent_color().into(),
-                    width: 2.0,
+                    width: BORDER_WIDTH_HIGHLIGHT,
                     radius: BORDER_RADIUS.into(),
                 },
                 ..Default::default()
@@ -65,7 +65,7 @@ pub fn render_day_cell(
                 },
                 border: Border {
                     color: COLOR_DAY_CELL_BORDER.into(),
-                    width: 1.0,
+                    width: BORDER_WIDTH_NORMAL,
                     radius: BORDER_RADIUS.into(),
                 },
                 ..Default::default()

@@ -35,12 +35,18 @@ pub const PADDING_COLOR_PICKER_NESTED: [u16; 4] = [4, 0, 4, 36]; // indented col
 
 // Border styling
 pub const BORDER_RADIUS: [f32; 4] = [4.0, 4.0, 4.0, 4.0];
+pub const BORDER_WIDTH_THIN: f32 = 0.5; // Cell grid borders
+pub const BORDER_WIDTH_NORMAL: f32 = 1.0; // Standard day cell borders
+pub const BORDER_WIDTH_HIGHLIGHT: f32 = 2.0; // Today indicator and selected items
+pub const BORDER_WIDTH_SELECTED: f32 = 3.0; // Color picker selected state
 pub const LIGHT_BORDER_OPACITY: f32 = 0.2;
 
 // Color picker dimensions
 pub const COLOR_BUTTON_SIZE_SMALL: f32 = 28.0;
 pub const COLOR_BUTTON_SIZE_MEDIUM: f32 = 32.0;
 pub const COLOR_BUTTON_SIZE_LARGE: f32 = 36.0;
+pub const COLOR_INDICATOR_SIZE: f32 = 24.0; // Size of color indicator circle
+pub const COLOR_PALETTE_COLUMNS: usize = 6; // Number of colors per row in palette grid
 pub const SPACING_COLOR_GRID: u16 = 6;
 pub const SPACING_COLOR_CONTAINER: u16 = 8;
 

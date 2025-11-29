@@ -8,7 +8,7 @@ use crate::models::DayState;
 use crate::ui_constants::{
     SPACING_TINY, PADDING_SMALL, PADDING_MEDIUM,
     FONT_SIZE_SMALL, FONT_SIZE_MEDIUM, FONT_SIZE_LARGE, BORDER_RADIUS, COLOR_DAY_CELL_BORDER,
-    HOUR_ROW_HEIGHT, TIME_LABEL_WIDTH, ALL_DAY_HEADER_HEIGHT
+    HOUR_ROW_HEIGHT, TIME_LABEL_WIDTH, ALL_DAY_HEADER_HEIGHT, BORDER_WIDTH_THIN
 };
 
 pub fn render_day_view(day_state: &DayState, locale: &LocalePreferences) -> Element<'static, Message> {
@@ -78,7 +78,7 @@ fn render_all_day_section(day_state: &DayState) -> Element<'static, Message> {
             .padding(PADDING_SMALL)
             .style(|_theme: &cosmic::Theme| container::Style {
                 border: Border {
-                    width: 0.5,
+                    width: BORDER_WIDTH_THIN,
                     color: COLOR_DAY_CELL_BORDER,
                     ..Default::default()
                 },
@@ -111,7 +111,7 @@ fn render_time_grid(locale: &LocalePreferences) -> Element<'static, Message> {
             .align_y(alignment::Vertical::Top)
             .style(|_theme: &cosmic::Theme| container::Style {
                 border: Border {
-                    width: 0.5,
+                    width: BORDER_WIDTH_THIN,
                     color: COLOR_DAY_CELL_BORDER,
                     ..Default::default()
                 },
@@ -126,7 +126,7 @@ fn render_time_grid(locale: &LocalePreferences) -> Element<'static, Message> {
                 .height(Length::Fixed(HOUR_ROW_HEIGHT))
                 .style(|_theme: &cosmic::Theme| container::Style {
                     border: Border {
-                        width: 0.5,
+                        width: BORDER_WIDTH_THIN,
                         color: COLOR_DAY_CELL_BORDER,
                         ..Default::default()
                     },

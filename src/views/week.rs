@@ -9,7 +9,8 @@ use crate::models::WeekState;
 use crate::ui_constants::{
     SPACING_TINY, PADDING_SMALL,
     FONT_SIZE_SMALL, FONT_SIZE_MEDIUM, BORDER_RADIUS, COLOR_DAY_CELL_BORDER,
-    HOUR_ROW_HEIGHT, TIME_LABEL_WIDTH, ALL_DAY_HEADER_HEIGHT, COLOR_WEEKEND_BACKGROUND
+    HOUR_ROW_HEIGHT, TIME_LABEL_WIDTH, ALL_DAY_HEADER_HEIGHT, COLOR_WEEKEND_BACKGROUND,
+    BORDER_WIDTH_THIN
 };
 
 pub fn render_week_view(week_state: &WeekState, locale: &LocalePreferences) -> Element<'static, Message> {
@@ -85,7 +86,7 @@ fn render_all_day_section(week_state: &WeekState, locale: &LocalePreferences) ->
                         None
                     },
                     border: Border {
-                        width: 0.5,
+                        width: BORDER_WIDTH_THIN,
                         color: COLOR_DAY_CELL_BORDER,
                         ..Default::default()
                     },
@@ -119,7 +120,7 @@ fn render_time_grid(week_state: &WeekState, locale: &LocalePreferences) -> Eleme
             .align_y(alignment::Vertical::Top)
             .style(|_theme: &cosmic::Theme| container::Style {
                 border: Border {
-                    width: 0.5,
+                    width: BORDER_WIDTH_THIN,
                     color: COLOR_DAY_CELL_BORDER,
                     ..Default::default()
                 },
@@ -142,7 +143,7 @@ fn render_time_grid(week_state: &WeekState, locale: &LocalePreferences) -> Eleme
                             None
                         },
                         border: Border {
-                            width: 0.5,
+                            width: BORDER_WIDTH_THIN,
                             color: COLOR_DAY_CELL_BORDER,
                             ..Default::default()
                         },

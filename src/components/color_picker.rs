@@ -6,11 +6,9 @@ use crate::message::Message;
 use crate::ui_constants::{
     COLOR_BUTTON_SIZE_SMALL, COLOR_BUTTON_SIZE_MEDIUM, COLOR_BUTTON_SIZE_LARGE,
     SPACING_COLOR_GRID, SPACING_COLOR_CONTAINER, PADDING_STANDARD,
-    COLOR_DEFAULT_GRAY, COLOR_BORDER_LIGHT, COLOR_BORDER_SELECTED, BORDER_RADIUS
+    COLOR_DEFAULT_GRAY, COLOR_BORDER_LIGHT, COLOR_BORDER_SELECTED, BORDER_RADIUS,
+    COLOR_INDICATOR_SIZE, COLOR_PALETTE_COLUMNS, BORDER_WIDTH_HIGHLIGHT, BORDER_WIDTH_SELECTED
 };
-
-/// Size of the color indicator button
-pub const COLOR_INDICATOR_SIZE: f32 = 24.0;
 
 /// Predefined color palette for calendars
 pub const CALENDAR_COLORS: &[(&str, &str)] = &[
@@ -63,7 +61,7 @@ pub fn render_color_indicator<'a>(
                     background: Some(cosmic::iced::Background::Color(color)),
                     border: Border {
                         radius: (size / 2.0).into(),
-                        width: 2.0,
+                        width: BORDER_WIDTH_HIGHLIGHT,
                         color: COLOR_BORDER_LIGHT,
                     },
                     ..Default::default()
@@ -79,8 +77,8 @@ pub fn render_color_indicator<'a>(
 pub fn render_color_palette<'a>(calendar_id: String) -> Element<'a, Message> {
     let mut color_grid = column().spacing(SPACING_COLOR_CONTAINER);
 
-    // Split colors into rows of 6
-    for row_colors in CALENDAR_COLORS.chunks(6) {
+    // Split colors into rows
+    for row_colors in CALENDAR_COLORS.chunks(COLOR_PALETTE_COLUMNS) {
         let mut color_row = row().spacing(SPACING_COLOR_CONTAINER);
 
         for (hex, name) in row_colors {
@@ -97,7 +95,7 @@ pub fn render_color_palette<'a>(calendar_id: String) -> Element<'a, Message> {
                             background: Some(cosmic::iced::Background::Color(color)),
                             border: Border {
                                 radius: (COLOR_BUTTON_SIZE_MEDIUM / 2.0).into(),
-                                width: 2.0,
+                                width: BORDER_WIDTH_HIGHLIGHT,
                                 color: COLOR_BORDER_LIGHT,
                             },
                             ..Default::default()
@@ -152,7 +150,7 @@ pub fn render_quick_color_picker<'a>(
             let calendar_id_clone = calendar_id.clone();
             let is_selected = current_color == hex;
 
-            let border_width = if is_selected { 3.0 } else { 2.0 };
+            let border_width = if is_selected { BORDER_WIDTH_SELECTED } else { BORDER_WIDTH_HIGHLIGHT };
             let border_color = if is_selected {
                 COLOR_BORDER_SELECTED
             } else {
