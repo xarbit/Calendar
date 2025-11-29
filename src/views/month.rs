@@ -79,7 +79,7 @@ pub fn render_month_view(
 
                 // Directly push cell without extra container wrapper
                 week_row = week_row.push(
-                    container(render_day_cell(*day, is_today, is_selected, is_weekend))
+                    container(render_day_cell(calendar_state.year, calendar_state.month, *day, is_today, is_selected, is_weekend))
                         .width(Length::Fill)
                         .height(Length::Fill)
                 );

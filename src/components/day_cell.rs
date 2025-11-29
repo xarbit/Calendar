@@ -6,6 +6,8 @@ use crate::message::Message;
 use crate::ui_constants::{BORDER_RADIUS, PADDING_DAY_CELL, COLOR_DAY_CELL_BORDER, COLOR_WEEKEND_BACKGROUND, BORDER_WIDTH_HIGHLIGHT, BORDER_WIDTH_NORMAL};
 
 pub fn render_day_cell(
+    year: i32,
+    month: u32,
     day: u32,
     is_today: bool,
     is_selected: bool,
@@ -74,6 +76,6 @@ pub fn render_day_cell(
 
     // Single mouse_area wrapping the styled container
     mouse_area(styled_container)
-        .on_press(Message::SelectDay(day))
+        .on_press(Message::SelectDay(year, month, day))
         .into()
 }

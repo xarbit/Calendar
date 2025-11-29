@@ -6,7 +6,7 @@ pub enum Message {
     PreviousPeriod,
     NextPeriod,
     Today,
-    SelectDay(u32),
+    SelectDay(i32, u32, u32), // (year, month, day)
     ToggleSidebar,
     ToggleSearch,
     ToggleWeekNumbers,

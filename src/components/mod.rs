@@ -3,6 +3,7 @@ mod color_picker;
 mod day_cell;
 mod header_menu;
 mod mini_calendar;
+mod time_grid;
 mod toolbar;
 
 pub use calendar_list::render_calendar_list;
@@ -10,4 +11,5 @@ pub use color_picker::{render_color_indicator, render_color_palette, render_quic
 pub use day_cell::render_day_cell;
 pub use header_menu::{render_header_end, render_header_start};
 pub use mini_calendar::render_mini_calendar;
+pub use time_grid::{render_time_grid, render_time_column_placeholder, grid_cell_style, bordered_cell_style, DayColumn};
 pub use toolbar::render_toolbar;

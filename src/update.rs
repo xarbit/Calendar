@@ -1,6 +1,6 @@
+use chrono::{Datelike, NaiveDate};
 use crate::app::CosmicCalendar;
 use crate::message::Message;
-use crate::models::{WeekState, DayState, YearState};
 use crate::views::CalendarView;
 use cosmic::app::Task;
 
@@ -8,7 +8,10 @@ use cosmic::app::Task;
 pub fn handle_message(app: &mut CosmicCalendar, message: Message) -> Task<Message> {
     match message {
         Message::ChangeView(view) => {
+            // When changing views, sync views to the selected_date so the new view
+            // shows the period containing the anchor date
             app.current_view = view;
+            app.sync_views_to_selected_date();
         }
         Message::PreviousPeriod => {
             handle_previous_period(app);
@@ -17,23 +20,14 @@ pub fn handle_message(app: &mut CosmicCalendar, message: Message) -> Task<Messag
             handle_next_period(app);
         }
         Message::Today => {
-            match app.current_view {
-                CalendarView::Year => {
-                    app.year_state = YearState::current();
-                }
-                CalendarView::Week => {
-                    app.week_state = WeekState::current_with_first_day(app.locale.first_day_of_week, &app.locale);
-                }
-                CalendarView::Day => {
-                    app.day_state = DayState::current(&app.locale);
-                }
-                CalendarView::Month => {
-                    app.navigate_to_today();
-                }
-            }
+            // Today button navigates to today in all views
+            app.navigate_to_today();
         }
-        Message::SelectDay(day) => {
-            app.selected_day = Some(day);
+        Message::SelectDay(year, month, day) => {
+            // Set the selected date - this syncs all views automatically
+            if let Some(date) = NaiveDate::from_ymd_opt(year, month, day) {
+                app.set_selected_date(date);
+            }
         }
         Message::ToggleSidebar => {
             app.show_sidebar = !app.show_sidebar;
@@ -59,10 +53,10 @@ pub fn handle_message(app: &mut CosmicCalendar, message: Message) -> Task<Messag
             app.color_picker_open = None;
         }
         Message::MiniCalendarPrevMonth => {
-            app.navigate_to_previous_month();
+            app.navigate_mini_calendar_previous();
         }
         Message::MiniCalendarNextMonth => {
-            app.navigate_to_next_month();
+            app.navigate_mini_calendar_next();
         }
         Message::NewEvent => {
             // TODO: Open new event dialog
@@ -93,34 +87,84 @@ pub fn handle_message(app: &mut CosmicCalendar, message: Message) -> Task<Messag
 }
 
 /// Handle previous period navigation based on current view
+/// This moves the view backwards but updates selected_date to stay in sync
 fn handle_previous_period(app: &mut CosmicCalendar) {
-    match app.current_view {
+    let new_date = match app.current_view {
         CalendarView::Year => {
-            app.year_state = app.year_state.previous();
+            // Move back one year
+            NaiveDate::from_ymd_opt(
+                app.selected_date.year() - 1,
+                app.selected_date.month(),
+                app.selected_date.day().min(28) // Handle edge cases like Feb 29
+            ).or_else(|| NaiveDate::from_ymd_opt(
+                app.selected_date.year() - 1,
+                app.selected_date.month(),
+                28
+            ))
         }
-        CalendarView::Month => app.navigate_to_previous_month(),
+        CalendarView::Month => {
+            // Move back one month
+            let (year, month) = if app.selected_date.month() == 1 {
+                (app.selected_date.year() - 1, 12)
+            } else {
+                (app.selected_date.year(), app.selected_date.month() - 1)
+            };
+            NaiveDate::from_ymd_opt(year, month, app.selected_date.day().min(28))
+                .or_else(|| NaiveDate::from_ymd_opt(year, month, 28))
+        }
         CalendarView::Week => {
-            app.week_state = app.week_state.previous(&app.locale);
+            // Move back one week
+            Some(app.selected_date - chrono::Duration::days(7))
         }
         CalendarView::Day => {
-            app.day_state = app.day_state.previous(&app.locale);
+            // Move back one day
+            Some(app.selected_date - chrono::Duration::days(1))
         }
+    };
+
+    if let Some(date) = new_date {
+        app.set_selected_date(date);
     }
 }
 
 /// Handle next period navigation based on current view
+/// This moves the view forward but updates selected_date to stay in sync
 fn handle_next_period(app: &mut CosmicCalendar) {
-    match app.current_view {
+    let new_date = match app.current_view {
         CalendarView::Year => {
-            app.year_state = app.year_state.next();
+            // Move forward one year
+            NaiveDate::from_ymd_opt(
+                app.selected_date.year() + 1,
+                app.selected_date.month(),
+                app.selected_date.day().min(28)
+            ).or_else(|| NaiveDate::from_ymd_opt(
+                app.selected_date.year() + 1,
+                app.selected_date.month(),
+                28
+            ))
         }
-        CalendarView::Month => app.navigate_to_next_month(),
+        CalendarView::Month => {
+            // Move forward one month
+            let (year, month) = if app.selected_date.month() == 12 {
+                (app.selected_date.year() + 1, 1)
+            } else {
+                (app.selected_date.year(), app.selected_date.month() + 1)
+            };
+            NaiveDate::from_ymd_opt(year, month, app.selected_date.day().min(28))
+                .or_else(|| NaiveDate::from_ymd_opt(year, month, 28))
+        }
         CalendarView::Week => {
-            app.week_state = app.week_state.next(&app.locale);
+            // Move forward one week
+            Some(app.selected_date + chrono::Duration::days(7))
         }
         CalendarView::Day => {
-            app.day_state = app.day_state.next(&app.locale);
+            // Move forward one day
+            Some(app.selected_date + chrono::Duration::days(1))
         }
+    };
+
+    if let Some(date) = new_date {
+        app.set_selected_date(date);
     }
 }
 

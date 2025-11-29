@@ -16,6 +16,8 @@ pub fn render_mini_calendar(
     selected_day: Option<u32>,
 ) -> Element<'static, Message> {
     let month_year_text = calendar_state.month_year_text.clone();
+    let year = calendar_state.year;
+    let month = calendar_state.month;
 
     let header = row()
         .spacing(SPACING_MEDIUM)
@@ -56,17 +58,17 @@ pub fn render_mini_calendar(
 
                 let day_button = if is_today {
                     widget::button::suggested((*day).to_string())
-                        .on_press(Message::SelectDay(*day))
+                        .on_press(Message::SelectDay(year, month, *day))
                         .padding(PADDING_TINY)
                         .width(Length::Fixed(MINI_CALENDAR_DAY_BUTTON_SIZE))
                 } else if is_selected {
                     widget::button::standard((*day).to_string())
-                        .on_press(Message::SelectDay(*day))
+                        .on_press(Message::SelectDay(year, month, *day))
                         .padding(PADDING_TINY)
                         .width(Length::Fixed(MINI_CALENDAR_DAY_BUTTON_SIZE))
                 } else {
                     widget::button::text((*day).to_string())
-                        .on_press(Message::SelectDay(*day))
+                        .on_press(Message::SelectDay(year, month, *day))
                         .padding(PADDING_TINY)
                         .width(Length::Fixed(MINI_CALENDAR_DAY_BUTTON_SIZE))
                 };
