@@ -10,7 +10,7 @@ pub use local_calendar::LocalCalendar;
 use crate::caldav::CalendarEvent;
 use crate::components::DisplayEvent;
 use crate::database::Database;
-use chrono::Datelike;
+use chrono::{Datelike, Timelike};
 use std::collections::HashMap;
 use std::error::Error;
 use std::sync::{Arc, Mutex};
@@ -188,10 +188,23 @@ impl CalendarManager {
                 for event in events {
                     let event_date = event.start.date_naive();
                     if event_date.year() == year && event_date.month() == month {
+                        // Extract start time for timed events
+                        let start_time = if event.all_day {
+                            None
+                        } else {
+                            Some(chrono::NaiveTime::from_hms_opt(
+                                event.start.hour(),
+                                event.start.minute(),
+                                0,
+                            ).unwrap_or_default())
+                        };
+
                         let display_event = DisplayEvent {
                             uid: event.uid.clone(),
                             summary: event.summary.clone(),
                             color: calendar_color.clone(),
+                            all_day: event.all_day,
+                            start_time,
                         };
                         events_by_day
                             .entry(event_date.day())

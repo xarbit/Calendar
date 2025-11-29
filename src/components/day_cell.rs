@@ -6,7 +6,7 @@ use cosmic::{widget, Element};
 use crate::components::{render_events_column, render_quick_event_input, DisplayEvent};
 use crate::message::Message;
 use crate::styles::{today_outlined_style, selected_day_style, day_cell_style};
-use crate::ui_constants::{PADDING_DAY_CELL, SPACING_TINY};
+use crate::ui_constants::{PADDING_DAY_CELL, SPACING_TINY, SPACING_SMALL};
 
 /// Apply the appropriate style to a day cell container based on state
 fn apply_day_cell_style<'a>(
@@ -57,20 +57,35 @@ pub fn render_day_cell_with_events(config: DayCellConfig) -> Element<'static, Me
         .width(Length::Fill)
         .align_x(alignment::Horizontal::Right);
 
-    // Events section
+    // Build content with day number at top
     let mut content = column()
-        .spacing(SPACING_TINY)
+        .spacing(SPACING_SMALL) // More spacing between day number and events
         .width(Length::Fill)
         .push(header);
 
-    // Show quick event input if editing on this day
-    if let Some((text, color)) = config.quick_event {
-        content = content.push(render_quick_event_input(text, color));
-    }
+    // Events section in its own container
+    let has_events = !config.events.is_empty() || config.quick_event.is_some();
+    if has_events {
+        let mut events_content = column()
+            .spacing(SPACING_TINY)
+            .width(Length::Fill);
 
-    // Show existing events (max 3 visible in month view)
-    if !config.events.is_empty() {
-        content = content.push(render_events_column(config.events, 3));
+        // Show quick event input if editing on this day
+        if let Some((text, color)) = config.quick_event {
+            events_content = events_content.push(render_quick_event_input(text, color));
+        }
+
+        // Show existing events (max 3 visible in month view)
+        if !config.events.is_empty() {
+            events_content = events_content.push(render_events_column(config.events, 3));
+        }
+
+        // Wrap events in a clipping container to prevent overflow
+        let events_container = container(events_content)
+            .width(Length::Fill)
+            .clip(true);
+
+        content = content.push(events_container);
     }
 
     // Build styled container based on state
