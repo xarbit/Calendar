@@ -1,11 +1,21 @@
 /// Locale-aware formatting and settings based on system configuration
 use std::env;
+use chrono::Datelike;
+
+/// Date format order
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DateFormat {
+    DMY, // Day-Month-Year (e.g., 31/12/2024) - Most of world
+    MDY, // Month-Day-Year (e.g., 12/31/2024) - US
+    YMD, // Year-Month-Day (e.g., 2024-12-31) - ISO 8601, East Asia
+}
 
 /// Locale preferences for calendar display
 #[derive(Debug, Clone, PartialEq)]
 pub struct LocalePreferences {
     pub use_24_hour: bool,
     pub first_day_of_week: chrono::Weekday,
+    pub date_format: DateFormat,
     pub locale_string: String,
 }
 
@@ -19,10 +29,12 @@ impl LocalePreferences {
 
         let use_24_hour = detect_24_hour_format(&locale_string);
         let first_day_of_week = detect_first_day_of_week(&locale_string);
+        let date_format = detect_date_format(&locale_string);
 
         LocalePreferences {
             use_24_hour,
             first_day_of_week,
+            date_format,
             locale_string,
         }
     }
@@ -69,6 +81,118 @@ impl LocalePreferences {
         // In some Middle Eastern countries, weekend is Friday and Saturday
         // For now, use standard Saturday/Sunday
         matches!(weekday, Weekday::Sat | Weekday::Sun)
+    }
+
+    /// Format a date range for week view (e.g., "Nov 24 - 30, 2024" or "24 - 30 Nov, 2024")
+    pub fn format_week_range(&self, first_day: &chrono::NaiveDate, last_day: &chrono::NaiveDate, week_number: u32) -> String {
+        match self.date_format {
+            DateFormat::MDY => {
+                // US format: "W48 - Nov 24 - 30, 2024"
+                if first_day.month() == last_day.month() {
+                    format!(
+                        "W{} - {} {} - {}, {}",
+                        week_number,
+                        first_day.format("%b"),
+                        first_day.day(),
+                        last_day.day(),
+                        first_day.year()
+                    )
+                } else if first_day.year() == last_day.year() {
+                    format!(
+                        "W{} - {} {} - {} {}, {}",
+                        week_number,
+                        first_day.format("%b"),
+                        first_day.day(),
+                        last_day.format("%b"),
+                        last_day.day(),
+                        first_day.year()
+                    )
+                } else {
+                    format!(
+                        "W{} - {} {}, {} - {} {}, {}",
+                        week_number,
+                        first_day.format("%b"),
+                        first_day.day(),
+                        first_day.year(),
+                        last_day.format("%b"),
+                        last_day.day(),
+                        last_day.year()
+                    )
+                }
+            }
+            DateFormat::DMY => {
+                // European format: "W48 - 24 - 30 Nov, 2024"
+                if first_day.month() == last_day.month() {
+                    format!(
+                        "W{} - {} - {} {}, {}",
+                        week_number,
+                        first_day.day(),
+                        last_day.day(),
+                        first_day.format("%b"),
+                        first_day.year()
+                    )
+                } else if first_day.year() == last_day.year() {
+                    format!(
+                        "W{} - {} {} - {} {}, {}",
+                        week_number,
+                        first_day.day(),
+                        first_day.format("%b"),
+                        last_day.day(),
+                        last_day.format("%b"),
+                        first_day.year()
+                    )
+                } else {
+                    format!(
+                        "W{} - {} {}, {} - {} {}, {}",
+                        week_number,
+                        first_day.day(),
+                        first_day.format("%b"),
+                        first_day.year(),
+                        last_day.day(),
+                        last_day.format("%b"),
+                        last_day.year()
+                    )
+                }
+            }
+            DateFormat::YMD => {
+                // ISO format: "W48 - 2024-11-24 - 2024-11-30"
+                if first_day.year() == last_day.year() && first_day.month() == last_day.month() {
+                    format!(
+                        "W{} - {}-{:02}-{:02} - {:02}",
+                        week_number,
+                        first_day.year(),
+                        first_day.month(),
+                        first_day.day(),
+                        last_day.day()
+                    )
+                } else {
+                    format!(
+                        "W{} - {} - {}",
+                        week_number,
+                        first_day.format("%Y-%m-%d"),
+                        last_day.format("%Y-%m-%d")
+                    )
+                }
+            }
+        }
+    }
+
+    /// Format a short date for day view header (e.g., "Monday, Nov 24" or "Monday, 24 Nov")
+    pub fn format_day_header(&self, date: &chrono::NaiveDate, day_name: &str) -> String {
+        match self.date_format {
+            DateFormat::MDY => {
+                // US format: "Monday, Nov 24"
+                format!("{}, {} {}", day_name, date.format("%b"), date.day())
+            }
+            DateFormat::DMY => {
+                // European format: "Monday, 24 Nov"
+                format!("{}, {} {}", day_name, date.day(), date.format("%b"))
+            }
+            DateFormat::YMD => {
+                // ISO format: "Monday, 2024-11-24"
+                format!("{}, {}", day_name, date.format("%Y-%m-%d"))
+            }
+        }
     }
 }
 
@@ -144,6 +268,40 @@ fn detect_first_day_of_week(locale: &str) -> chrono::Weekday {
     Weekday::Mon
 }
 
+/// Detect date format from locale
+fn detect_date_format(locale: &str) -> DateFormat {
+    let locale_lower = locale.to_lowercase();
+
+    // MDY (Month-Day-Year) - Primarily US
+    let mdy_locales = [
+        "en_us", "en_ca", "en_ph", "fil_ph", "tl_ph"
+    ];
+
+    // YMD (Year-Month-Day) - ISO 8601, East Asian countries
+    let ymd_locales = [
+        "ja_jp", "ko_kr", "zh_cn", "zh_tw", "zh_hk", "zh_sg",
+        "hu_hu", "lt_lt", "mn_mn", "ko_kp"
+    ];
+
+    // Check for MDY locales
+    for mdy_locale in &mdy_locales {
+        if locale_lower.starts_with(mdy_locale) {
+            return DateFormat::MDY;
+        }
+    }
+
+    // Check for YMD locales
+    for ymd_locale in &ymd_locales {
+        if locale_lower.starts_with(ymd_locale) {
+            return DateFormat::YMD;
+        }
+    }
+
+    // Default to DMY (Day-Month-Year) for most of the world
+    // This includes: UK, Europe, Australia, India, Middle East, Africa, South America, etc.
+    DateFormat::DMY
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -172,6 +330,7 @@ mod tests {
         let locale_24h = LocalePreferences {
             use_24_hour: true,
             first_day_of_week: Weekday::Mon,
+            date_format: DateFormat::DMY,
             locale_string: "de_DE.UTF-8".to_string(),
         };
 
@@ -182,6 +341,7 @@ mod tests {
         let locale_12h = LocalePreferences {
             use_24_hour: false,
             first_day_of_week: Weekday::Sun,
+            date_format: DateFormat::MDY,
             locale_string: "en_US.UTF-8".to_string(),
         };
 
@@ -189,5 +349,15 @@ mod tests {
         assert_eq!(locale_12h.format_hour(1), "1 AM");
         assert_eq!(locale_12h.format_hour(12), "12 PM");
         assert_eq!(locale_12h.format_hour(13), "1 PM");
+    }
+
+    #[test]
+    fn test_date_format_detection() {
+        assert_eq!(detect_date_format("en_US.UTF-8"), DateFormat::MDY);
+        assert_eq!(detect_date_format("en_GB.UTF-8"), DateFormat::DMY);
+        assert_eq!(detect_date_format("de_DE.UTF-8"), DateFormat::DMY);
+        assert_eq!(detect_date_format("ja_JP.UTF-8"), DateFormat::YMD);
+        assert_eq!(detect_date_format("zh_CN.UTF-8"), DateFormat::YMD);
+        assert_eq!(detect_date_format("ko_KR.UTF-8"), DateFormat::YMD);
     }
 }

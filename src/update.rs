@@ -19,10 +19,10 @@ pub fn handle_message(app: &mut CosmicCalendar, message: Message) -> Task<Messag
         Message::Today => {
             match app.current_view {
                 CalendarView::Week => {
-                    app.week_state = WeekState::current_with_first_day(app.locale.first_day_of_week);
+                    app.week_state = WeekState::current_with_first_day(app.locale.first_day_of_week, &app.locale);
                 }
                 CalendarView::Day => {
-                    app.day_state = DayState::current();
+                    app.day_state = DayState::current(&app.locale);
                 }
                 _ => {
                     app.navigate_to_today();
@@ -89,10 +89,10 @@ fn handle_previous_period(app: &mut CosmicCalendar) {
     match app.current_view {
         CalendarView::Month => app.navigate_to_previous_month(),
         CalendarView::Week => {
-            app.week_state = app.week_state.previous();
+            app.week_state = app.week_state.previous(&app.locale);
         }
         CalendarView::Day => {
-            app.day_state = app.day_state.previous();
+            app.day_state = app.day_state.previous(&app.locale);
         }
     }
 }
@@ -102,10 +102,10 @@ fn handle_next_period(app: &mut CosmicCalendar) {
     match app.current_view {
         CalendarView::Month => app.navigate_to_next_month(),
         CalendarView::Week => {
-            app.week_state = app.week_state.next();
+            app.week_state = app.week_state.next(&app.locale);
         }
         CalendarView::Day => {
-            app.day_state = app.day_state.next();
+            app.day_state = app.day_state.next(&app.locale);
         }
     }
 }

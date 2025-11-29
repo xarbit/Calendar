@@ -1,4 +1,5 @@
 use chrono::{Datelike, NaiveDate, Weekday};
+use crate::locale::LocalePreferences;
 
 /// Cached week state for week view
 #[derive(Debug, Clone, PartialEq)]
@@ -6,14 +7,14 @@ pub struct WeekState {
     pub year: i32,
     pub week_number: u32,
     pub days: Vec<NaiveDate>, // 7 days in the week starting from first_day_of_week
-    pub week_range_text: String, // Pre-formatted "Jan 1 - Jan 7, 2024"
+    pub week_range_text: String, // Pre-formatted week range with locale-aware format
     pub today: NaiveDate,
     pub first_day_of_week: Weekday,
 }
 
 impl WeekState {
     /// Create a new WeekState for the week containing the given date
-    pub fn new(date: NaiveDate, first_day_of_week: Weekday) -> Self {
+    pub fn new(date: NaiveDate, first_day_of_week: Weekday, locale: &LocalePreferences) -> Self {
         let today = chrono::Local::now().date_naive();
 
         // Find the first day of the week containing the date
@@ -30,41 +31,10 @@ impl WeekState {
         let year = date.year();
         let week_number = date.iso_week().week();
 
-        // Format week range text
+        // Format week range text using locale-aware formatting
         let first_day = &days[0];
         let last_day = &days[6];
-
-        let week_range_text = if first_day.month() == last_day.month() {
-            format!(
-                "W{} - {} {} - {}, {}",
-                week_number,
-                first_day.format("%b"),
-                first_day.day(),
-                last_day.day(),
-                first_day.year()
-            )
-        } else if first_day.year() == last_day.year() {
-            format!(
-                "W{} - {} {} - {} {}, {}",
-                week_number,
-                first_day.format("%b"),
-                first_day.day(),
-                last_day.format("%b"),
-                last_day.day(),
-                first_day.year()
-            )
-        } else {
-            format!(
-                "W{} - {} {}, {} - {} {}, {}",
-                week_number,
-                first_day.format("%b"),
-                first_day.day(),
-                first_day.year(),
-                last_day.format("%b"),
-                last_day.day(),
-                last_day.year()
-            )
-        };
+        let week_range_text = locale.format_week_range(first_day, last_day, week_number);
 
         WeekState {
             year,
@@ -77,23 +47,23 @@ impl WeekState {
     }
 
     /// Create WeekState for current week with Monday as first day
-    pub fn current() -> Self {
-        Self::new(chrono::Local::now().date_naive(), Weekday::Mon)
+    pub fn current(locale: &LocalePreferences) -> Self {
+        Self::new(chrono::Local::now().date_naive(), Weekday::Mon, locale)
     }
 
     /// Create WeekState for current week with custom first day
-    pub fn current_with_first_day(first_day_of_week: Weekday) -> Self {
-        Self::new(chrono::Local::now().date_naive(), first_day_of_week)
+    pub fn current_with_first_day(first_day_of_week: Weekday, locale: &LocalePreferences) -> Self {
+        Self::new(chrono::Local::now().date_naive(), first_day_of_week, locale)
     }
 
     /// Navigate to previous week
-    pub fn previous(&self) -> Self {
-        Self::new(self.days[0] - chrono::Duration::days(7), self.first_day_of_week)
+    pub fn previous(&self, locale: &LocalePreferences) -> Self {
+        Self::new(self.days[0] - chrono::Duration::days(7), self.first_day_of_week, locale)
     }
 
     /// Navigate to next week
-    pub fn next(&self) -> Self {
-        Self::new(self.days[0] + chrono::Duration::days(7), self.first_day_of_week)
+    pub fn next(&self, locale: &LocalePreferences) -> Self {
+        Self::new(self.days[0] + chrono::Duration::days(7), self.first_day_of_week, locale)
     }
 
     /// Check if a given date is today
