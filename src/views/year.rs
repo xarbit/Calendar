@@ -41,16 +41,17 @@ fn calculate_layout(available_width: f32, available_height: f32) -> (usize, Opti
     if num_columns == 4 {
         let num_rows = 3;
 
+        // Calculate box size based on available height (this is the limiting factor)
+        let height_for_boxes = available_height - padding - (spacing * (num_rows as f32 - 1.0));
+        let box_from_height = height_for_boxes / num_rows as f32;
+
         // Calculate box size based on available width
         let width_for_boxes = available_width - padding - (spacing * (num_columns as f32 - 1.0));
-        let box_width = width_for_boxes / num_columns as f32;
+        let box_from_width = width_for_boxes / num_columns as f32;
 
-        // Calculate box size based on available height
-        let height_for_boxes = available_height - padding - (spacing * (num_rows as f32 - 1.0));
-        let box_height = height_for_boxes / num_rows as f32;
-
-        // Use the smaller of the two to maintain square boxes, but not smaller than minimum
-        let box_size = box_width.min(box_height).max(MIN_MONTH_BOX_SIZE);
+        // Use the smaller of the two to maintain square boxes and proper 4:3 aspect ratio
+        // This ensures on ultra-wide monitors we don't stretch beyond what height allows
+        let box_size = box_from_width.min(box_from_height).max(MIN_MONTH_BOX_SIZE);
 
         (num_columns, Some(box_size))
     } else {
