@@ -104,6 +104,21 @@ pub fn handle_delete_event(app: &mut CosmicCalendar, uid: String) {
     app.refresh_cached_events();
 }
 
+/// Select an event for viewing/editing
+/// Toggles selection - clicking the same event again deselects it
+pub fn handle_select_event(app: &mut CosmicCalendar, uid: String) {
+    debug!("handle_select_event: uid={}", uid);
+
+    // Toggle selection: if already selected, deselect
+    if app.selected_event_uid.as_ref() == Some(&uid) {
+        app.selected_event_uid = None;
+        debug!("handle_select_event: Deselected event");
+    } else {
+        app.selected_event_uid = Some(uid);
+        debug!("handle_select_event: Selected event");
+    }
+}
+
 /// Start editing a quick event on a specific date
 /// Uses DialogManager to open ActiveDialog::QuickEvent
 pub fn handle_start_quick_event(app: &mut CosmicCalendar, date: NaiveDate) {

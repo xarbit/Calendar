@@ -87,6 +87,8 @@ pub enum Message {
     CancelQuickEvent,
     /// Delete an event by its UID
     DeleteEvent(String),
+    /// Select an event (single click) for viewing/editing
+    SelectEvent(String),
 
     // Event management - Event dialog
     /// Open the event dialog for creating a new event

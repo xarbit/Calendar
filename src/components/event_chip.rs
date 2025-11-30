@@ -2,7 +2,7 @@ use chrono::NaiveTime;
 use cosmic::iced::Length;
 use cosmic::iced::widget::text::Wrapping;
 use cosmic::iced_widget::text_input;
-use cosmic::widget::{column, container, row};
+use cosmic::widget::{column, container, mouse_area, row};
 use cosmic::{widget, Element};
 
 use crate::components::color_picker::parse_hex_color;
@@ -10,6 +10,7 @@ use crate::message::Message;
 use crate::ui_constants::{
     SPACING_TINY, SPACING_XXS, BORDER_RADIUS, COLOR_DEFAULT_GRAY,
     DATE_EVENT_HEIGHT, DATE_EVENT_SPACING, COMPACT_EVENT_HEIGHT,
+    BORDER_WIDTH_HIGHLIGHT,
 };
 
 /// ID for the quick event text input - used for auto-focus
@@ -198,6 +199,142 @@ pub fn render_event_chip(event: DisplayEvent, current_date: NaiveDate) -> Elemen
     }
 }
 
+/// Render a clickable event chip with selection state
+/// Wraps the event chip with mouse interaction for selection
+///
+/// # Arguments
+/// * `event` - The display event with span metadata
+/// * `current_date` - The date of the cell being rendered
+/// * `is_selected` - Whether this event is currently selected
+pub fn render_clickable_event_chip(
+    event: DisplayEvent,
+    current_date: NaiveDate,
+    is_selected: bool,
+) -> Element<'static, Message> {
+    let uid = event.uid.clone();
+    let color = parse_hex_color(&event.color).unwrap_or(COLOR_DEFAULT_GRAY);
+
+    let chip = if event.all_day {
+        let span_position = event.span_position_for_date(current_date);
+        render_all_day_chip_selectable(event.summary, color, span_position, is_selected)
+    } else {
+        render_timed_event_chip_selectable(event.summary, event.start_time, color, is_selected)
+    };
+
+    // Wrap with mouse area for click handling
+    mouse_area(chip)
+        .on_press(Message::SelectEvent(uid.clone()))
+        .on_double_click(Message::OpenEditEventDialog(uid))
+        .into()
+}
+
+/// Render an all-day event chip with selection highlight
+fn render_all_day_chip_selectable(
+    summary: String,
+    color: cosmic::iced::Color,
+    span_position: SpanPosition,
+    is_selected: bool,
+) -> Element<'static, Message> {
+    let radius = BORDER_RADIUS[0];
+    let border_radius: [f32; 4] = match span_position {
+        SpanPosition::Single => [radius, radius, radius, radius],
+        SpanPosition::First => [radius, 0.0, 0.0, radius],
+        SpanPosition::Middle => [0.0, 0.0, 0.0, 0.0],
+        SpanPosition::Last => [0.0, radius, radius, 0.0],
+    };
+
+    let padding: [u16; 4] = match span_position {
+        SpanPosition::Single => [2, 4, 2, 4],
+        SpanPosition::First => [2, 0, 2, 4],
+        SpanPosition::Middle => [2, 0, 2, 0],
+        SpanPosition::Last => [2, 4, 2, 0],
+    };
+
+    let content: Element<'static, Message> = widget::text(summary)
+        .size(11)
+        .wrapping(Wrapping::None)
+        .into();
+
+    container(content)
+        .padding(padding)
+        .width(Length::Fill)
+        .clip(true)
+        .style(move |_theme: &cosmic::Theme| {
+            container::Style {
+                background: Some(cosmic::iced::Background::Color(
+                    color.scale_alpha(if is_selected { 0.5 } else { 0.3 })
+                )),
+                border: cosmic::iced::Border {
+                    color: if is_selected { color } else { cosmic::iced::Color::TRANSPARENT },
+                    width: if is_selected { BORDER_WIDTH_HIGHLIGHT } else { 0.0 },
+                    radius: border_radius.into(),
+                },
+                text_color: Some(color),
+                ..Default::default()
+            }
+        })
+        .into()
+}
+
+/// Render a timed event chip with selection highlight
+fn render_timed_event_chip_selectable(
+    summary: String,
+    start_time: Option<NaiveTime>,
+    color: cosmic::iced::Color,
+    is_selected: bool,
+) -> Element<'static, Message> {
+    let dot = container(widget::text(""))
+        .width(Length::Fixed(TIMED_EVENT_DOT_SIZE))
+        .height(Length::Fixed(TIMED_EVENT_DOT_SIZE))
+        .style(move |_theme: &cosmic::Theme| {
+            container::Style {
+                background: Some(cosmic::iced::Background::Color(color)),
+                border: cosmic::iced::Border {
+                    color: cosmic::iced::Color::TRANSPARENT,
+                    width: 0.0,
+                    radius: (TIMED_EVENT_DOT_SIZE / 2.0).into(),
+                },
+                ..Default::default()
+            }
+        });
+
+    let display_text = if let Some(time) = start_time {
+        format!("{} {}", time.format("%H:%M"), summary)
+    } else {
+        summary
+    };
+
+    let text = widget::text(display_text)
+        .size(11)
+        .wrapping(Wrapping::None);
+
+    container(
+        row()
+            .spacing(SPACING_XXS)
+            .align_y(cosmic::iced::Alignment::Center)
+            .push(dot)
+            .push(text)
+    )
+    .width(Length::Fill)
+    .clip(true)
+    .style(move |_theme: &cosmic::Theme| {
+        if is_selected {
+            container::Style {
+                background: Some(cosmic::iced::Background::Color(color.scale_alpha(0.15))),
+                border: cosmic::iced::Border {
+                    color,
+                    width: BORDER_WIDTH_HIGHLIGHT,
+                    radius: BORDER_RADIUS.into(),
+                },
+                ..Default::default()
+            }
+        } else {
+            container::Style::default()
+        }
+    })
+    .into()
+}
+
 /// Render the quick event input field for inline editing
 /// Takes ownership of the data to avoid lifetime issues
 pub fn render_quick_event_input(
@@ -305,6 +442,25 @@ pub fn render_unified_events(
     current_date: NaiveDate,
     week_max_slot: Option<usize>,
 ) -> UnifiedEventsResult {
+    render_unified_events_with_selection(events, max_visible, current_date, week_max_slot, None)
+}
+
+/// Render events as a unified column with selection support.
+/// Timed events are rendered with click handlers and visual feedback for selection.
+///
+/// # Arguments
+/// * `events` - Events to render
+/// * `max_visible` - Maximum number of events to show
+/// * `current_date` - The date of the cell
+/// * `week_max_slot` - Maximum slot index for the week (determines placeholder count)
+/// * `selected_event_uid` - UID of the currently selected event (if any)
+pub fn render_unified_events_with_selection(
+    events: Vec<DisplayEvent>,
+    max_visible: usize,
+    current_date: NaiveDate,
+    week_max_slot: Option<usize>,
+    selected_event_uid: Option<&str>,
+) -> UnifiedEventsResult {
     // Separate all-day and timed events
     let (all_day_events, mut timed_events): (Vec<_>, Vec<_>) =
         events.into_iter().partition(|e| e.all_day);
@@ -338,7 +494,8 @@ pub fn render_unified_events(
         if shown >= max_visible {
             break;
         }
-        col = col.push(render_event_chip(event, current_date));
+        let is_selected = selected_event_uid.map_or(false, |uid| uid == event.uid);
+        col = col.push(render_clickable_event_chip(event, current_date, is_selected));
         shown += 1;
     }
 

@@ -4,7 +4,7 @@ use chrono::{Datelike, NaiveDate};
 use cosmic::iced::widget::stack;
 use cosmic::iced::widget::text::Wrapping;
 use cosmic::iced::{alignment, Length, Size};
-use cosmic::widget::{column, container, row, responsive};
+use cosmic::widget::{column, container, mouse_area, row, responsive};
 use cosmic::{widget, Element};
 
 use crate::components::color_picker::parse_hex_color;
@@ -22,7 +22,7 @@ use crate::ui_constants::{
     FONT_SIZE_MEDIUM, FONT_SIZE_SMALL, PADDING_SMALL, PADDING_MONTH_GRID,
     SPACING_TINY, WEEK_NUMBER_WIDTH, COLOR_DEFAULT_GRAY,
     DATE_EVENT_HEIGHT, COMPACT_EVENT_HEIGHT, DATE_EVENT_SPACING,
-    DAY_CELL_HEADER_OFFSET, DAY_CELL_TOP_PADDING,
+    DAY_CELL_HEADER_OFFSET, DAY_CELL_TOP_PADDING, BORDER_WIDTH_HIGHLIGHT,
 };
 
 /// Height of the spanning quick event input overlay
@@ -70,6 +70,8 @@ pub struct MonthViewEvents<'a> {
     pub selection: &'a SelectionState,
     /// Active dialog state (for showing selection highlight during quick event input)
     pub active_dialog: &'a ActiveDialog,
+    /// Currently selected event UID (for visual feedback)
+    pub selected_event_uid: Option<&'a str>,
 }
 
 /// Render the weekday header row with responsive names
@@ -315,11 +317,13 @@ fn collect_date_event_segments(
 /// * `events_by_date` - Events grouped by date
 /// * `show_week_numbers` - Whether week numbers column is visible
 /// * `compact` - If true, render thin colored lines instead of full event chips
+/// * `selected_event_uid` - Currently selected event UID for visual feedback
 fn render_date_events_overlay<'a>(
     weeks: &[Vec<CalendarDay>],
     events_by_date: &HashMap<NaiveDate, Vec<DisplayEvent>>,
     show_week_numbers: bool,
     compact: bool,
+    selected_event_uid: Option<&str>,
 ) -> Option<Element<'a, Message>> {
     let segments = collect_date_event_segments(weeks, events_by_date);
 
@@ -398,6 +402,7 @@ fn render_date_events_overlay<'a>(
 
                     // Render the spanning chip (full or compact based on mode)
                     let span_cols = seg.end_col - seg.start_col + 1;
+                    let is_selected = selected_event_uid == Some(seg.uid.as_str());
                     let chip = if compact {
                         render_compact_date_event_chip(
                             seg.color.clone(),
@@ -406,11 +411,13 @@ fn render_date_events_overlay<'a>(
                         )
                     } else {
                         render_date_event_chip(
+                            seg.uid.clone(),
                             seg.summary.clone(),
                             seg.color.clone(),
                             seg.is_first_segment,
                             seg.start_col == 0,
                             seg.end_col == 6,
+                            is_selected,
                         )
                     };
 
@@ -506,12 +513,15 @@ fn render_compact_date_event_chip(
 
 /// Render a single date event chip for the overlay.
 /// Works for both single-day and multi-day date events.
+/// Includes click handling for event selection.
 fn render_date_event_chip(
+    uid: String,
     summary: String,
     color_hex: String,
     show_text: bool,
     is_event_start: bool,
     is_event_end: bool,
+    is_selected: bool,
 ) -> Element<'static, Message> {
     let color = parse_hex_color(&color_hex).unwrap_or(COLOR_DEFAULT_GRAY);
 
@@ -537,22 +547,29 @@ fn render_date_event_chip(
             .into()
     };
 
-    container(content)
+    let chip = container(content)
         .padding([2, 4, 2, 4])
         .width(Length::Fill)
         .height(Length::Fill)
         .style(move |_theme: &cosmic::Theme| {
             container::Style {
-                background: Some(cosmic::iced::Background::Color(color.scale_alpha(0.3))),
+                background: Some(cosmic::iced::Background::Color(
+                    color.scale_alpha(if is_selected { 0.5 } else { 0.3 })
+                )),
                 border: cosmic::iced::Border {
-                    color: cosmic::iced::Color::TRANSPARENT,
-                    width: 0.0,
+                    color: if is_selected { color } else { cosmic::iced::Color::TRANSPARENT },
+                    width: if is_selected { BORDER_WIDTH_HIGHLIGHT } else { 0.0 },
                     radius: border_radius.into(),
                 },
                 text_color: Some(color),
                 ..Default::default()
             }
-        })
+        });
+
+    // Wrap with mouse area for click handling
+    mouse_area(chip)
+        .on_press(Message::SelectEvent(uid.clone()))
+        .on_double_click(Message::OpenEditEventDialog(uid))
         .into()
 }
 
@@ -659,6 +676,11 @@ pub fn render_month_view<'a>(
                 (false, false)
             };
 
+            // Get selected event UID from events if available
+            let selected_event_uid = events.as_ref()
+                .and_then(|e| e.selected_event_uid)
+                .map(|s| s.to_string());
+
             let cell = render_day_cell_with_events(DayCellConfig {
                 year,
                 month,
@@ -673,6 +695,7 @@ pub fn render_month_view<'a>(
                 quick_event: quick_event_data,
                 is_in_selection,
                 selection_active,
+                selected_event_uid,
             });
 
             week_row = week_row.push(
@@ -706,6 +729,7 @@ pub fn render_month_view<'a>(
         let weeks = calendar_state.weeks_full.clone();
         let events_by_date = e.events_by_date.clone();
         let week_number_offset = if show_week_numbers { WEEK_NUMBER_WIDTH } else { 0.0 };
+        let selected_uid = e.selected_event_uid.map(|s| s.to_string());
 
         let responsive_overlay = responsive(move |size: Size| {
             // Calculate approximate cell width (7 days + spacing)
@@ -725,6 +749,7 @@ pub fn render_month_view<'a>(
                 &events_by_date,
                 show_week_numbers,
                 compact,
+                selected_uid.as_deref(),
             ) {
                 overlay
             } else {

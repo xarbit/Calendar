@@ -4,7 +4,7 @@ use cosmic::widget::{column, container, mouse_area, responsive};
 use cosmic::{widget, Element};
 
 use crate::components::{
-    render_compact_events, render_unified_events, render_quick_event_input, DisplayEvent,
+    render_compact_events, render_unified_events_with_selection, render_quick_event_input, DisplayEvent,
     calculate_display_mode, EventDisplayMode,
 };
 use crate::message::Message;
@@ -66,6 +66,8 @@ pub struct DayCellConfig {
     pub is_in_selection: bool,
     /// Whether a drag selection is currently active
     pub selection_active: bool,
+    /// Currently selected event UID (for visual feedback)
+    pub selected_event_uid: Option<String>,
 }
 
 /// Render a day cell with events and optional quick event input
@@ -155,11 +157,12 @@ pub fn render_day_cell_with_events(config: DayCellConfig) -> Element<'static, Me
                     }
                 } else {
                     // Full mode: unified column with placeholders followed by timed events
-                    let unified = render_unified_events(
+                    let unified = render_unified_events_with_selection(
                         config.events.clone(),
                         max_visible,
                         current_date,
                         config.week_max_slot,
+                        config.selected_event_uid.as_deref(),
                     );
 
                     // Single container for all events (placeholders + timed)

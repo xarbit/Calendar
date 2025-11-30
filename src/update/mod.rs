@@ -55,7 +55,8 @@ use calendar::{
 use event::{
     handle_cancel_event_dialog, handle_cancel_quick_event, handle_commit_quick_event,
     handle_confirm_event_dialog, handle_delete_event, handle_open_edit_event_dialog,
-    handle_open_new_event_dialog, handle_quick_event_text_changed, handle_start_quick_event,
+    handle_open_new_event_dialog, handle_quick_event_text_changed, handle_select_event,
+    handle_start_quick_event,
 };
 use navigation::{handle_next_period, handle_previous_period};
 use selection::{
@@ -272,6 +273,9 @@ pub fn handle_message(app: &mut CosmicCalendar, message: Message) -> Task<Messag
         }
         Message::DeleteEvent(uid) => {
             handle_delete_event(app, uid);
+        }
+        Message::SelectEvent(uid) => {
+            handle_select_event(app, uid);
         }
 
         // === Event Management - Event Dialog ===

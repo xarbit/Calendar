@@ -124,6 +124,8 @@ pub struct CosmicCalendar {
     pub active_dialog: ActiveDialog,
     /// Drag selection state for multi-day event creation
     pub selection_state: SelectionState,
+    /// Currently selected event UID (for viewing/editing/deleting)
+    pub selected_event_uid: Option<String>,
 
     // Legacy field - kept because text_editor::Content doesn't implement Clone
     /// Event dialog state (for Create/Edit) - None when dialog is closed
@@ -204,6 +206,7 @@ impl CosmicCalendar {
             selected_calendar_color,
             active_dialog: ActiveDialog::None,
             selection_state: SelectionState::new(),
+            selected_event_uid: None,
             // Legacy field - kept because text_editor::Content doesn't implement Clone
             event_dialog: None,
         }
@@ -317,6 +320,7 @@ impl CosmicCalendar {
             quick_event: quick_event_data,
             selection: &self.selection_state,
             active_dialog: &self.active_dialog,
+            selected_event_uid: self.selected_event_uid.as_deref(),
         };
 
         views::render_main_content(
