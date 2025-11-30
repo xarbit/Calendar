@@ -44,6 +44,7 @@ pub struct DisplayEvent {
     pub color: String,      // Hex color from calendar
     pub all_day: bool,      // Whether this is an all-day event
     pub start_time: Option<NaiveTime>, // Start time for timed events
+    pub end_time: Option<NaiveTime>,   // End time for timed events (for week/day view positioning)
     /// Start date of the event span (for multi-day events)
     pub span_start: Option<NaiveDate>,
     /// End date of the event span (for multi-day events)

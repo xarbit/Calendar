@@ -118,6 +118,8 @@ pub struct CosmicCalendar {
     pub selected_calendar_id: Option<String>,
     /// Cached events for current month view, grouped by date (supports adjacent months)
     pub cached_month_events: std::collections::HashMap<chrono::NaiveDate, Vec<crate::components::DisplayEvent>>,
+    /// Cached events for current week view, grouped by date
+    pub cached_week_events: std::collections::HashMap<chrono::NaiveDate, Vec<crate::components::DisplayEvent>>,
     /// Color of the selected calendar (cached for quick event input)
     pub selected_calendar_color: String,
     /// Centralized dialog state - only one dialog can be open at a time
@@ -185,6 +187,10 @@ impl CosmicCalendar {
         // Cache events for current month
         let cached_month_events = calendar_manager.get_display_events_for_month(year, month);
 
+        // Create week state and cache week events
+        let week_state = WeekState::current_with_first_day(locale.first_day_of_week, &locale);
+        let cached_week_events = calendar_manager.get_display_events_for_week(&week_state.days);
+
         #[allow(deprecated)]
         CosmicCalendar {
             core,
@@ -195,7 +201,7 @@ impl CosmicCalendar {
             last_condensed: false, // Will be synced on first render
             show_search: false,
             cache,
-            week_state: WeekState::current_with_first_day(locale.first_day_of_week, &locale),
+            week_state,
             day_state: DayState::current(&locale),
             year_state: YearState::current(),
             mini_calendar_state,
@@ -205,6 +211,7 @@ impl CosmicCalendar {
             key_binds,
             selected_calendar_id,
             cached_month_events,
+            cached_week_events,
             selected_calendar_color,
             active_dialog: ActiveDialog::None,
             selection_state: SelectionState::new(),
@@ -241,11 +248,16 @@ impl CosmicCalendar {
         self.refresh_cached_events();
     }
 
-    /// Refresh the cached events for the current month view
+    /// Refresh the cached events for both month and week views
     pub fn refresh_cached_events(&mut self) {
+        // Refresh month events
         let cache_state = self.cache.current_state();
         self.cached_month_events = self.calendar_manager
             .get_display_events_for_month(cache_state.year, cache_state.month);
+
+        // Refresh week events
+        self.cached_week_events = self.calendar_manager
+            .get_display_events_for_week(&self.week_state.days);
     }
 
     /// Update the selected calendar color cache
@@ -329,6 +341,14 @@ impl CosmicCalendar {
             drag_target_date: self.event_drag_state.target_date(),
         };
 
+        let week_events = views::WeekViewEvents {
+            events_by_date: &self.cached_week_events,
+            selected_event_uid: self.selected_event_uid.as_deref(),
+            selection: &self.selection_state,
+            active_dialog: &self.active_dialog,
+            calendar_color: &self.selected_calendar_color,
+        };
+
         views::render_main_content(
             &self.cache,
             &self.week_state,
@@ -339,6 +359,7 @@ impl CosmicCalendar {
             Some(self.selected_date),
             self.settings.show_week_numbers,
             Some(month_events),
+            Some(week_events),
         )
     }
 }
@@ -399,7 +420,10 @@ impl Application for CosmicCalendar {
     }
 
     fn subscription(&self) -> cosmic::iced::Subscription<Self::Message> {
-        cosmic::iced::event::listen_with(|event, _status, _window_id| {
+        use cosmic::iced::Subscription;
+
+        // Event listener for keyboard, window resize, and mouse events
+        let event_sub = cosmic::iced::event::listen_with(|event, _status, _window_id| {
             match event {
                 // Handle keyboard shortcuts
                 cosmic::iced::Event::Keyboard(keyboard::Event::KeyPressed {
@@ -450,6 +474,12 @@ impl Application for CosmicCalendar {
                 }
                 _ => None,
             }
-        })
+        });
+
+        // Timer subscription for updating the current time indicator (every 30 seconds)
+        let timer_sub = cosmic::iced::time::every(std::time::Duration::from_secs(30))
+            .map(|_| Message::TimeTick);
+
+        Subscription::batch([event_sub, timer_sub])
     }
 }

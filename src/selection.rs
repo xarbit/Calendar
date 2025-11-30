@@ -182,6 +182,51 @@ impl SelectionState {
             .unwrap_or(false)
     }
 
+    /// Check if a date+hour cell is within the current time-based selection
+    /// Used for highlighting hour cells in week/day views
+    pub fn contains_time(&self, date: NaiveDate, hour: u32) -> bool {
+        let Some(range) = self.get_range() else {
+            return false;
+        };
+
+        // Create time points for the start and end of the hour
+        let cell_start = NaiveTime::from_hms_opt(hour, 0, 0).unwrap();
+        let cell_end = NaiveTime::from_hms_opt(hour, 59, 59).unwrap();
+
+        // Get selection times (default to full day if not set)
+        let sel_start_time = range.start.time.unwrap_or_else(|| NaiveTime::from_hms_opt(0, 0, 0).unwrap());
+        let sel_end_time = range.end.time.unwrap_or_else(|| NaiveTime::from_hms_opt(23, 59, 59).unwrap());
+
+        let sel_start_date = range.start.date;
+        let sel_end_date = range.end.date;
+
+        // Check if this cell overlaps with the selection
+        // The cell is selected if:
+        // - date is within the date range AND
+        // - time overlaps with the selected time range
+        if date < sel_start_date || date > sel_end_date {
+            return false;
+        }
+
+        // Same day selection
+        if sel_start_date == sel_end_date && date == sel_start_date {
+            // Cell overlaps if: cell_end >= sel_start AND cell_start <= sel_end
+            return cell_end >= sel_start_time && cell_start <= sel_end_time;
+        }
+
+        // Multi-day selection
+        if date == sel_start_date {
+            // First day: include cells from start time onwards
+            return cell_end >= sel_start_time;
+        } else if date == sel_end_date {
+            // Last day: include cells up to end time
+            return cell_start <= sel_end_time;
+        } else {
+            // Middle days: all cells are selected
+            return true;
+        }
+    }
+
     /// Get the start date (for backwards compatibility)
     pub fn start_date(&self) -> Option<NaiveDate> {
         self.start.map(|p| p.date)

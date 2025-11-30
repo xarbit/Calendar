@@ -1,4 +1,4 @@
-use chrono::NaiveDate;
+use chrono::{NaiveDate, NaiveTime};
 use crate::app::EventDialogField;
 use crate::caldav::{AlertTime, RepeatFrequency, TravelTime};
 use crate::dialogs::DialogAction;
@@ -23,6 +23,8 @@ pub enum Message {
     SelectDayNoNavigate(NaiveDate),
 
     // UI state
+    /// Timer tick for updating current time indicator (every minute)
+    TimeTick,
     ToggleSidebar,
     /// Triggered on window resize to sync sidebar with condensed state
     WindowResized,
@@ -76,9 +78,19 @@ pub enum Message {
     /// Cancel the current selection
     SelectionCancel,
 
+    // Time-based selection - Drag selection for timed events in week/day views
+    /// Start a time-based selection at given date and time (mouse press on hour cell)
+    TimeSelectionStart(NaiveDate, NaiveTime),
+    /// Update the time selection end point (mouse move while dragging)
+    TimeSelectionUpdate(NaiveDate, NaiveTime),
+    /// End the time selection (mouse release) - opens quick event input with time
+    TimeSelectionEnd,
+
     // Event management - Quick events
     /// Start creating a quick event on a specific date
     StartQuickEvent(NaiveDate),
+    /// Start creating a quick timed event with start and end times
+    StartQuickTimedEvent(NaiveDate, NaiveTime, NaiveTime),
     /// Update the quick event text while editing
     QuickEventTextChanged(String),
     /// Commit the quick event (on Enter press)

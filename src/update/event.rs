@@ -16,6 +16,7 @@ use crate::services::EventHandler;
 /// Commit the quick event being edited - create a new event in the selected calendar
 /// Uses DialogManager to get the event data from ActiveDialog::QuickEvent
 /// Supports both single-day and multi-day events (from drag selection)
+/// Also supports timed events (from time slot selection in week/day view)
 pub fn handle_commit_quick_event(app: &mut CosmicCalendar) {
     debug!("handle_commit_quick_event: Starting");
 
@@ -25,7 +26,7 @@ pub fn handle_commit_quick_event(app: &mut CosmicCalendar) {
         DialogAction::CommitQuickEvent,
     );
 
-    let Some(QuickEventResult { start_date, end_date, text }) = result else {
+    let Some(QuickEventResult { start_date, end_date, start_time: evt_start_time, end_time: evt_end_time, text }) = result else {
         debug!("handle_commit_quick_event: No quick event editing state");
         return;
     };
@@ -43,23 +44,37 @@ pub fn handle_commit_quick_event(app: &mut CosmicCalendar) {
         return;
     };
 
+    // Determine if this is a timed event or all-day event
+    let is_timed = evt_start_time.is_some();
     let is_multi_day = start_date != end_date;
-    if is_multi_day {
+
+    if is_timed {
+        info!(
+            "handle_commit_quick_event: Creating timed event '{}' on {} from {:?} to {:?} in calendar '{}'",
+            text, start_date, evt_start_time, evt_end_time, calendar_id
+        );
+    } else if is_multi_day {
         info!(
             "handle_commit_quick_event: Creating multi-day event '{}' from {} to {} in calendar '{}'",
             text, start_date, end_date, calendar_id
         );
     } else {
         info!(
-            "handle_commit_quick_event: Creating event '{}' on {} in calendar '{}'",
+            "handle_commit_quick_event: Creating all-day event '{}' on {} in calendar '{}'",
             text, start_date, calendar_id
         );
     }
 
-    // Create an all-day event
-    // Use midnight UTC for start, end of day for end
-    let start_time = NaiveTime::from_hms_opt(0, 0, 0).unwrap();
-    let end_time = NaiveTime::from_hms_opt(23, 59, 59).unwrap();
+    // Set times based on whether this is a timed event
+    let (start_time, end_time, all_day) = if let (Some(st), Some(et)) = (evt_start_time, evt_end_time) {
+        // Timed event - use the specified times
+        (st, et, false)
+    } else {
+        // All-day event - use midnight to end of day
+        let midnight = NaiveTime::from_hms_opt(0, 0, 0).unwrap();
+        let end_of_day = NaiveTime::from_hms_opt(23, 59, 59).unwrap();
+        (midnight, end_of_day, true)
+    };
 
     let start = Utc.from_utc_datetime(&start_date.and_time(start_time));
     let end = Utc.from_utc_datetime(&end_date.and_time(end_time));
@@ -68,7 +83,7 @@ pub fn handle_commit_quick_event(app: &mut CosmicCalendar) {
         uid: Uuid::new_v4().to_string(),
         summary: text.to_string(),
         location: None,
-        all_day: true,
+        all_day,
         start,
         end,
         travel_time: TravelTime::None,
@@ -212,6 +227,16 @@ pub fn handle_drag_event_cancel(app: &mut CosmicCalendar) {
 pub fn handle_start_quick_event(app: &mut CosmicCalendar, date: NaiveDate) {
     debug!("handle_start_quick_event: Starting quick event for {}", date);
     DialogManager::handle_action(&mut app.active_dialog, DialogAction::StartQuickEvent(date));
+}
+
+/// Start editing a quick timed event with specific start and end times
+/// Uses DialogManager to open ActiveDialog::QuickEvent with time info
+pub fn handle_start_quick_timed_event(app: &mut CosmicCalendar, date: NaiveDate, start_time: NaiveTime, end_time: NaiveTime) {
+    debug!("handle_start_quick_timed_event: Starting timed quick event for {} from {:?} to {:?}", date, start_time, end_time);
+    DialogManager::handle_action(
+        &mut app.active_dialog,
+        DialogAction::StartQuickTimedEvent { date, start_time, end_time },
+    );
 }
 
 /// Update the quick event text while editing

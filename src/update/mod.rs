@@ -15,6 +15,7 @@ mod selection;
 
 use chrono::{NaiveDate, Timelike};
 use cosmic::app::Task;
+use cosmic::iced::widget::scrollable;
 use log::{debug, info};
 
 use crate::app::CosmicCalendar;
@@ -22,6 +23,8 @@ use crate::components::quick_event_input_id;
 use crate::dialogs::{ActiveDialog, DialogManager};
 use crate::message::Message;
 use crate::services::SettingsHandler;
+use crate::views::{week_time_grid_id, CalendarView};
+use crate::ui_constants::HOUR_ROW_HEIGHT;
 use cosmic::iced_widget::text_input;
 
 /// Helper to dismiss empty quick events on focus-loss actions (navigation, day selection)
@@ -36,6 +39,25 @@ fn dismiss_on_focus_loss(app: &mut CosmicCalendar) {
 #[inline]
 fn focus_quick_event_input() -> Task<Message> {
     text_input::focus(quick_event_input_id())
+}
+
+/// Scroll the week view time grid to the current time
+/// Returns a Task that scrolls to show the current hour (offset by 1-2 hours to show some past)
+#[inline]
+fn scroll_week_to_current_time() -> Task<Message> {
+    let now = chrono::Local::now();
+    let current_hour = now.hour();
+
+    // Scroll to show current time with some context (show 1-2 hours before current time)
+    // Each hour row is HOUR_ROW_HEIGHT pixels tall
+    let scroll_to_hour = current_hour.saturating_sub(1) as f32;
+    let scroll_offset = scroll_to_hour * HOUR_ROW_HEIGHT;
+
+    // Use scroll_to with AbsoluteOffset for vertical scrolling
+    scrollable::scroll_to(
+        week_time_grid_id(),
+        scrollable::AbsoluteOffset { x: 0.0, y: scroll_offset },
+    )
 }
 
 /// Close the legacy event dialog field
@@ -57,11 +79,12 @@ use event::{
     handle_confirm_event_dialog, handle_delete_event, handle_drag_event_cancel,
     handle_drag_event_end, handle_drag_event_start, handle_drag_event_update,
     handle_open_edit_event_dialog, handle_open_new_event_dialog, handle_quick_event_text_changed,
-    handle_select_event, handle_start_quick_event,
+    handle_select_event, handle_start_quick_event, handle_start_quick_timed_event,
 };
 use navigation::{handle_next_period, handle_previous_period};
 use selection::{
     handle_selection_cancel, handle_selection_end, handle_selection_start, handle_selection_update,
+    handle_time_selection_start, handle_time_selection_update, handle_time_selection_end,
 };
 
 /// Handle all application messages and update state
@@ -100,6 +123,10 @@ pub fn handle_message(app: &mut CosmicCalendar, message: Message) -> Task<Messag
             dismiss_on_focus_loss(app);
             app.current_view = view;
             app.sync_views_to_selected_date();
+            // Auto-scroll to current time when entering week view
+            if view == CalendarView::Week {
+                return scroll_week_to_current_time();
+            }
         }
         Message::PreviousPeriod => {
             dismiss_on_focus_loss(app);
@@ -125,6 +152,10 @@ pub fn handle_message(app: &mut CosmicCalendar, message: Message) -> Task<Messag
         }
 
         // === UI State ===
+        Message::TimeTick => {
+            // Timer tick to update the current time indicator
+            // The view will re-render with the new time automatically
+        }
         Message::ToggleSidebar => {
             app.show_sidebar = !app.show_sidebar;
         }
@@ -258,9 +289,30 @@ pub fn handle_message(app: &mut CosmicCalendar, message: Message) -> Task<Messag
             handle_selection_cancel(app);
         }
 
+        // === Time-Based Selection - Drag Selection for Timed Events ===
+        Message::TimeSelectionStart(date, time) => {
+            // Cancel any empty quick event when starting a selection
+            DialogManager::dismiss_empty_quick_event(&mut app.active_dialog);
+            handle_time_selection_start(app, date, time);
+        }
+        Message::TimeSelectionUpdate(date, time) => {
+            handle_time_selection_update(app, date, time);
+        }
+        Message::TimeSelectionEnd => {
+            handle_time_selection_end(app);
+            // Focus the quick event input if a quick event was started
+            if app.active_dialog.is_quick_event() {
+                return focus_quick_event_input();
+            }
+        }
+
         // === Event Management - Quick Events ===
         Message::StartQuickEvent(date) => {
             handle_start_quick_event(app, date);
+            return focus_quick_event_input();
+        }
+        Message::StartQuickTimedEvent(date, start_time, end_time) => {
+            handle_start_quick_timed_event(app, date, start_time, end_time);
             return focus_quick_event_input();
         }
         Message::QuickEventTextChanged(text) => {
