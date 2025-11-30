@@ -56,6 +56,7 @@ fn render_dialog_overlay<'a>(
     let with_drag_preview = render_drag_preview_overlay(app, base);
 
     // Event dialog takes priority (uses legacy field due to text_editor::Content)
+    // Note: Event dialog has its own backdrop built-in
     #[allow(deprecated)]
     if let Some(ref dialog_state) = app.event_dialog {
         let dialog = render_event_dialog(dialog_state, app.calendar_manager.sources());
@@ -63,20 +64,50 @@ fn render_dialog_overlay<'a>(
     }
 
     // Check active_dialog for calendar dialogs
+    // COSMIC dialog widget doesn't include backdrop, so we wrap with one
     use crate::dialogs::ActiveDialog;
     match &app.active_dialog {
         ActiveDialog::CalendarCreate { .. } | ActiveDialog::CalendarEdit { .. } => {
             let dialog = render_calendar_dialog(&app.active_dialog);
-            return stack![with_drag_preview, dialog].into();
+            let dialog_with_backdrop = wrap_dialog_with_backdrop(dialog);
+            return stack![with_drag_preview, dialog_with_backdrop].into();
         }
         ActiveDialog::CalendarDelete { .. } => {
             let dialog = render_delete_calendar_dialog(&app.active_dialog);
-            return stack![with_drag_preview, dialog].into();
+            let dialog_with_backdrop = wrap_dialog_with_backdrop(dialog);
+            return stack![with_drag_preview, dialog_with_backdrop].into();
         }
         _ => {}
     }
 
     with_drag_preview
+}
+
+/// Wrap a COSMIC dialog widget with a backdrop and center it
+fn wrap_dialog_with_backdrop(dialog: Element<'_, Message>) -> Element<'_, Message> {
+    use cosmic::iced::alignment;
+
+    // Clickable backdrop that closes the dialog
+    let backdrop = mouse_area(
+        container(cosmic::widget::text(""))
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .style(|_theme: &cosmic::Theme| container::Style {
+                background: Some(cosmic::iced::Color::from_rgba(0.0, 0.0, 0.0, 0.5).into()),
+                ..Default::default()
+            }),
+    )
+    .on_press(Message::CloseDialog);
+
+    // Center the dialog
+    let centered_dialog = container(dialog)
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .align_x(alignment::Horizontal::Center)
+        .align_y(alignment::Vertical::Center);
+
+    // Stack: backdrop on bottom, dialog on top
+    stack![backdrop, centered_dialog].into()
 }
 
 /// Render a floating drag preview overlay when an event is being dragged
