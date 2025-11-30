@@ -40,10 +40,14 @@ pub fn today_filled_style(theme: &cosmic::Theme) -> container::Style {
     }
 }
 
-/// Style for selected day cell - border with accent color
-pub fn selected_day_style(theme: &cosmic::Theme) -> container::Style {
+/// Style for selected day cell - border with accent color, preserving weekend background
+pub fn selected_day_style(theme: &cosmic::Theme, is_weekend: bool) -> container::Style {
     container::Style {
-        background: None,
+        background: if is_weekend {
+            Some(Background::Color(COLOR_WEEKEND_BACKGROUND))
+        } else {
+            None
+        },
         border: Border {
             color: theme.cosmic().accent_color().into(),
             width: BORDER_WIDTH_HIGHLIGHT,

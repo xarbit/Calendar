@@ -42,7 +42,7 @@ fn apply_day_cell_style<'a>(
         // Drop target takes priority - show where the event will land
         base.style(move |theme: &cosmic::Theme| drag_target_style(theme, is_weekend))
     } else if is_selected {
-        base.style(|theme: &cosmic::Theme| selected_day_style(theme))
+        base.style(move |theme: &cosmic::Theme| selected_day_style(theme, is_weekend))
     } else if is_in_selection {
         base.style(move |theme: &cosmic::Theme| selection_highlight_style(theme, is_weekend))
     } else {
