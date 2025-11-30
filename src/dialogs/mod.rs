@@ -32,6 +32,7 @@ pub use manager::{
     ActiveDialog,
     DialogAction,
     DialogManager,
+    QuickEventResult,
 };
 
 // Keep old exports for backwards compatibility during migration
