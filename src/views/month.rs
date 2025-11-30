@@ -545,11 +545,14 @@ pub fn render_month_view<'a>(
 
     // Use pre-calculated weeks from CalendarState cache (with adjacent month days)
     for (week_index, week) in calendar_state.weeks_full.iter().enumerate() {
-        // Compute slot assignments for multi-day events in this week
+        // Compute slot assignments for date events in this week
         let event_slots = events
             .as_ref()
             .map(|e| compute_week_event_slots(week, e.events_by_date))
             .unwrap_or_default();
+
+        // Compute the max slot for this week - all day cells need this for consistent placeholders
+        let week_max_slot = event_slots.values().copied().max();
 
         let mut week_row = row().spacing(SPACING_TINY).height(Length::Fill);
 
@@ -628,6 +631,7 @@ pub fn render_month_view<'a>(
                 is_adjacent_month: !is_current_month,
                 events: day_events,
                 event_slots: event_slots.clone(),
+                week_max_slot,
                 quick_event: quick_event_data,
                 is_in_selection,
                 selection_active,

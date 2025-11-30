@@ -3,7 +3,7 @@ use cosmic::iced::{alignment, Length, Size};
 use cosmic::widget::{column, container, mouse_area, responsive};
 use cosmic::{widget, Element};
 
-use crate::components::{render_split_events, render_compact_events, render_quick_event_input, DisplayEvent};
+use crate::components::{render_compact_events, render_unified_events, render_quick_event_input, DisplayEvent};
 use crate::message::Message;
 use crate::styles::{
     today_circle_style, selected_day_style, day_cell_style, adjacent_month_day_style,
@@ -98,9 +98,11 @@ pub struct DayCellConfig {
     /// Whether this day is from an adjacent month (shown grayed out)
     pub is_adjacent_month: bool,
     pub events: Vec<DisplayEvent>,
-    /// Slot assignments for multi-day events: maps event UID to slot index
-    /// Events with slots are rendered in slot order, others fill remaining space
+    /// Slot assignments for date events: maps event UID to slot index
     pub event_slots: std::collections::HashMap<String, usize>,
+    /// Maximum slot index used in this week (for consistent vertical offset)
+    /// All day cells in the same week should have the same max_slot value
+    pub week_max_slot: Option<usize>,
     /// If Some, show quick event input with (editing_text, calendar_color)
     pub quick_event: Option<(String, String)>,
     /// Whether this day is part of the current drag selection range
@@ -136,8 +138,10 @@ pub fn render_day_cell_with_events(config: DayCellConfig) -> Element<'static, Me
         };
 
         // Right-align the day number with horizontal padding
+        // Use fixed height to ensure consistent positioning that matches the overlay
         let header = container(day_number)
             .width(Length::Fill)
+            .height(Length::Fixed(DAY_HEADER_HEIGHT))
             .padding([0, PADDING_DAY_CELL[1], 0, PADDING_DAY_CELL[3]]) // horizontal padding for header
             .align_x(alignment::Horizontal::Right);
 
@@ -148,7 +152,10 @@ pub fn render_day_cell_with_events(config: DayCellConfig) -> Element<'static, Me
             .push(header);
 
         // Events section - adapts based on display mode
-        let has_events = !config.events.is_empty() || config.quick_event.is_some();
+        // Check if we have events OR if there are slots reserved for date events spanning through this day
+        let has_slot_reservations = config.week_max_slot.is_some();
+        let has_events = !config.events.is_empty() || config.quick_event.is_some() || has_slot_reservations;
+
         if has_events {
             // Show quick event input if editing on this day (only in full mode)
             if let (Some((ref text, ref color)), EventDisplayMode::Full { .. }) = (&config.quick_event, display_mode) {
@@ -158,42 +165,34 @@ pub fn render_day_cell_with_events(config: DayCellConfig) -> Element<'static, Me
             }
 
             // Show existing events based on display mode
-            if !config.events.is_empty() && date.is_some() {
+            // Use unified events renderer that puts placeholders + timed events in a single column
+            if (!config.events.is_empty() || has_slot_reservations) && date.is_some() {
                 let current_date = date.unwrap();
 
                 match display_mode {
                     EventDisplayMode::Full { max_visible } => {
-                        // Full mode: regular event chips with text
-                        let split_events = render_split_events(
+                        // Full mode: unified column with placeholders followed by timed events
+                        let unified = render_unified_events(
                             config.events.clone(),
                             max_visible,
                             current_date,
-                            &config.event_slots
+                            config.week_max_slot,
                         );
 
-                        // All-day events: edge-to-edge, no horizontal padding
-                        // Multi-day events are placeholders; actual bars are in overlay
-                        if let Some(all_day) = split_events.all_day {
-                            let all_day_container = container(all_day)
+                        // Single container for all events (placeholders + timed)
+                        // Edge-to-edge width, clip overflow
+                        if let Some(events_element) = unified.events {
+                            let events_container = container(events_element)
                                 .width(Length::Fill)
                                 .clip(true);
-                            content = content.push(all_day_container);
-                        }
-
-                        // Timed events: with horizontal padding for indentation
-                        if let Some(timed) = split_events.timed {
-                            let timed_container = container(timed)
-                                .width(Length::Fill)
-                                .padding([0, PADDING_DAY_CELL[1], 0, PADDING_DAY_CELL[3]])
-                                .clip(true);
-                            content = content.push(timed_container);
+                            content = content.push(events_container);
                         }
 
                         // Show "+N more" if there are hidden events
-                        if split_events.overflow_count > 0 {
+                        if unified.overflow_count > 0 {
                             content = content.push(
                                 container(
-                                    widget::text(format!("+{} more", split_events.overflow_count))
+                                    widget::text(format!("+{} more", unified.overflow_count))
                                         .size(10)
                                 )
                                 .padding([0, PADDING_DAY_CELL[1], 0, PADDING_DAY_CELL[3]])
@@ -206,7 +205,8 @@ pub fn render_day_cell_with_events(config: DayCellConfig) -> Element<'static, Me
                             config.events.clone(),
                             max_visible,
                             current_date,
-                            &config.event_slots
+                            &config.event_slots,
+                            config.week_max_slot,
                         );
 
                         if let Some(compact_element) = compact_events.element {

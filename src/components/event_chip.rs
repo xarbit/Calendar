@@ -9,6 +9,9 @@ use crate::components::color_picker::parse_hex_color;
 use crate::message::Message;
 use crate::ui_constants::{SPACING_TINY, SPACING_XXS, BORDER_RADIUS, COLOR_DEFAULT_GRAY};
 
+/// Spacing between date event placeholders (must match DATE_EVENT_SPACING in month.rs)
+const DATE_EVENT_PLACEHOLDER_SPACING: u16 = 2;
+
 /// ID for the quick event text input - used for auto-focus
 pub fn quick_event_input_id() -> text_input::Id {
     text_input::Id::new("quick_event_input")
@@ -331,6 +334,14 @@ pub struct SplitEventsResult {
     pub overflow_count: usize,
 }
 
+/// Result containing a unified events column with placeholders and timed events
+pub struct UnifiedEventsResult {
+    /// Single column containing placeholders (for date events) followed by timed events
+    pub events: Option<Element<'static, Message>>,
+    /// Number of events not shown (for "+N more" indicator)
+    pub overflow_count: usize,
+}
+
 /// Render events split into two separate containers:
 /// - All-day events: edge-to-edge colored bars (no margin)
 /// - Timed events: dot + time format with margin/spacing
@@ -342,12 +353,14 @@ pub struct SplitEventsResult {
 /// * `events` - Events to render
 /// * `max_visible` - Maximum number of events to show
 /// * `current_date` - The date of the cell (for calculating span position of multi-day events)
-/// * `event_slots` - Slot assignments for multi-day events (UID -> slot index)
+/// * `event_slots` - Slot assignments for date events (UID -> slot index)
+/// * `week_max_slot` - Maximum slot index for the week (for consistent vertical positioning)
 pub fn render_split_events(
     events: Vec<DisplayEvent>,
     max_visible: usize,
     current_date: NaiveDate,
-    event_slots: &std::collections::HashMap<String, usize>,
+    _event_slots: &std::collections::HashMap<String, usize>,
+    week_max_slot: Option<usize>,
 ) -> SplitEventsResult {
     // Separate all-day and timed events
     let (all_day_events, mut timed_events): (Vec<_>, Vec<_>) =
@@ -356,51 +369,23 @@ pub fn render_split_events(
     // Sort timed events by start time
     timed_events.sort_by(|a, b| a.start_time.cmp(&b.start_time));
 
-    // Find the maximum slot number to know how many slot positions we need
-    let max_slot = event_slots.values().copied().max();
+    // Use the week's max_slot to determine placeholder count
+    // This ensures ALL day cells in the week reserve the same vertical space for date events
+    // The overlay renders max_slot+1 rows (slots 0 to max_slot), so we need the same
+    let total_placeholders = week_max_slot.map(|m| m + 1).unwrap_or(0);
 
-    // Build a slot-ordered list of all-day events
-    // We need to render events in strict slot order, with empty space for gaps
-    let mut ordered_all_day: Vec<Option<DisplayEvent>> = Vec::new();
 
-    if let Some(max_s) = max_slot {
-        // Initialize with None for each slot
-        ordered_all_day.resize(max_s + 1, None);
-
-        // Place slotted events in their slots
-        for event in all_day_events.iter() {
-            if let Some(&slot) = event_slots.get(&event.uid) {
-                if slot < ordered_all_day.len() {
-                    ordered_all_day[slot] = Some(event.clone());
-                }
-            }
-        }
-
-        // Collect unslotted all-day events (single-day events)
-        let unslotted: Vec<DisplayEvent> = all_day_events
-            .into_iter()
-            .filter(|e| !event_slots.contains_key(&e.uid))
-            .collect();
-
-        // Append unslotted events after the slotted ones
-        for event in unslotted {
-            ordered_all_day.push(Some(event));
-        }
-    } else {
-        // No slotted events, just use all events as-is
-        for event in all_day_events {
-            ordered_all_day.push(Some(event));
-        }
-    }
-
-    let total_events = ordered_all_day.iter().filter(|e| e.is_some()).count() + timed_events.len();
+    // Count actual events for overflow calculation
+    let actual_date_events_on_day = all_day_events.len();
+    let total_events = actual_date_events_on_day + timed_events.len();
     let mut shown = 0;
 
-    // All all-day events are rendered in the overlay layer (month.rs)
-    // Render placeholders here to maintain slot alignment for timed events below
-    let all_day = if !ordered_all_day.is_empty() {
-        let mut col = column().spacing(SPACING_TINY);
-        for _slot_event in ordered_all_day {
+    // All date events are rendered in the overlay layer (month.rs)
+    // Render placeholders here to maintain slot alignment for date-time events below
+    // Use same spacing as overlay (DATE_EVENT_SPACING = 2) for proper alignment
+    let all_day = if total_placeholders > 0 {
+        let mut col = column().spacing(DATE_EVENT_PLACEHOLDER_SPACING);
+        for _ in 0..total_placeholders {
             if shown >= max_visible {
                 break;
             }
@@ -442,13 +427,85 @@ pub fn render_split_events(
 }
 
 /// Render an empty placeholder to maintain slot alignment
-/// This creates an invisible spacer with the same height as an event chip
+/// This creates an invisible spacer with the same height as an overlay event row
+/// Must match DATE_EVENT_HEIGHT (19.0) in month.rs exactly
 fn render_empty_slot_placeholder() -> Element<'static, Message> {
     container(widget::text(""))
-        .padding([2, 4])
         .width(Length::Fill)
-        .height(Length::Fixed(19.0)) // Match event chip height (11px text + 2*2 padding + spacing)
+        .height(Length::Fixed(19.0)) // Must match DATE_EVENT_HEIGHT in overlay
         .into()
+}
+
+/// Render events as a unified column: placeholders for date events followed by timed events.
+/// This ensures timed events always appear BELOW the overlay date events.
+///
+/// The key insight: the overlay positions date events at a fixed offset from the cell top.
+/// We render invisible placeholders of the exact same height to push timed events down.
+///
+/// # Arguments
+/// * `events` - Events to render
+/// * `max_visible` - Maximum number of events to show
+/// * `current_date` - The date of the cell
+/// * `week_max_slot` - Maximum slot index for the week (determines placeholder count)
+pub fn render_unified_events(
+    events: Vec<DisplayEvent>,
+    max_visible: usize,
+    current_date: NaiveDate,
+    week_max_slot: Option<usize>,
+) -> UnifiedEventsResult {
+    // Separate all-day and timed events
+    let (all_day_events, mut timed_events): (Vec<_>, Vec<_>) =
+        events.into_iter().partition(|e| e.all_day);
+
+    // Sort timed events by start time
+    timed_events.sort_by(|a, b| a.start_time.cmp(&b.start_time));
+
+    // Calculate placeholder count from week_max_slot
+    // The overlay renders slots 0..=max_slot, so we need max_slot+1 placeholders
+    let total_placeholders = week_max_slot.map(|m| m + 1).unwrap_or(0);
+
+    // Count total events for overflow
+    let actual_date_events = all_day_events.len();
+    let total_events = actual_date_events + timed_events.len();
+
+    // Build a single column with consistent DATE_EVENT_SPACING (2px) to match overlay
+    let mut col = column().spacing(DATE_EVENT_PLACEHOLDER_SPACING);
+    let mut shown = 0;
+
+    // First: render placeholders for date event slots (these align with overlay)
+    for _ in 0..total_placeholders {
+        if shown >= max_visible {
+            break;
+        }
+        col = col.push(render_empty_slot_placeholder());
+        shown += 1;
+    }
+
+    // Second: render timed events (date-time events) below the placeholders
+    for event in timed_events {
+        if shown >= max_visible {
+            break;
+        }
+        col = col.push(render_event_chip(event, current_date));
+        shown += 1;
+    }
+
+    let overflow_count = if total_events > max_visible {
+        total_events - max_visible
+    } else {
+        0
+    };
+
+    let events = if total_placeholders > 0 || shown > total_placeholders {
+        Some(col.into())
+    } else {
+        None
+    };
+
+    UnifiedEventsResult {
+        events,
+        overflow_count,
+    }
 }
 
 /// Render a spanning multi-day event chip that stretches across columns
@@ -586,12 +643,14 @@ fn render_compact_empty_placeholder() -> Element<'static, Message> {
 /// * `events` - Events to render
 /// * `max_visible` - Maximum number of compact indicators to show
 /// * `current_date` - The date of the cell (for calculating span position)
-/// * `event_slots` - Slot assignments for multi-day events
+/// * `event_slots` - Slot assignments for date events
+/// * `week_max_slot` - Maximum slot index for the week (for consistent vertical positioning)
 pub fn render_compact_events(
     events: Vec<DisplayEvent>,
     max_visible: usize,
-    current_date: NaiveDate,
-    event_slots: &std::collections::HashMap<String, usize>,
+    _current_date: NaiveDate,
+    _event_slots: &std::collections::HashMap<String, usize>,
+    week_max_slot: Option<usize>,
 ) -> CompactEventsResult {
     // Separate all-day and timed events
     let (all_day_events, mut timed_events): (Vec<_>, Vec<_>) =
@@ -600,61 +659,23 @@ pub fn render_compact_events(
     // Sort timed events by start time
     timed_events.sort_by(|a, b| a.start_time.cmp(&b.start_time));
 
-    // Find the maximum slot number for all-day events
-    let max_slot = event_slots.values().copied().max();
-
-    // Build slot-ordered list of all-day events
-    let mut ordered_all_day: Vec<Option<DisplayEvent>> = Vec::new();
-
-    if let Some(max_s) = max_slot {
-        ordered_all_day.resize(max_s + 1, None);
-
-        for event in all_day_events.iter() {
-            if let Some(&slot) = event_slots.get(&event.uid) {
-                if slot < ordered_all_day.len() {
-                    ordered_all_day[slot] = Some(event.clone());
-                }
-            }
-        }
-
-        // Add unslotted all-day events
-        let unslotted: Vec<DisplayEvent> = all_day_events
-            .into_iter()
-            .filter(|e| !event_slots.contains_key(&e.uid))
-            .collect();
-
-        for event in unslotted {
-            ordered_all_day.push(Some(event));
-        }
-    } else {
-        for event in all_day_events {
-            ordered_all_day.push(Some(event));
-        }
-    }
-
-    let total_events = ordered_all_day.iter().filter(|e| e.is_some()).count() + timed_events.len();
+    // Use the week's max_slot to determine placeholder count
+    let total_placeholders = week_max_slot.map(|m| m + 1).unwrap_or(0);
+    let total_events = all_day_events.len() + timed_events.len();
     let mut shown = 0;
 
-    let mut col = column().spacing(SPACING_TINY);
+    // Use same spacing as overlay for proper alignment
+    let mut col = column().spacing(DATE_EVENT_PLACEHOLDER_SPACING);
     let mut has_content = false;
 
-    // Render all-day events as thin colored lines
-    for slot_event in ordered_all_day {
+    // Render placeholders for date events (actual events are in overlay)
+    for _ in 0..total_placeholders {
         if shown >= max_visible {
             break;
         }
-        match slot_event {
-            Some(event) => {
-                let color = parse_hex_color(&event.color).unwrap_or(COLOR_DEFAULT_GRAY);
-                let span_position = event.span_position_for_date(current_date);
-                col = col.push(render_compact_event_indicator(color, span_position));
-                has_content = true;
-            }
-            None => {
-                col = col.push(render_compact_empty_placeholder());
-            }
-        }
+        col = col.push(render_compact_empty_placeholder());
         shown += 1;
+        has_content = true;
     }
 
     // Render timed events as small dots in a row
