@@ -326,7 +326,7 @@ impl CosmicCalendar {
             selected_event_uid: self.selected_event_uid.as_deref(),
             event_drag_active: self.event_drag_state.is_active,
             dragging_event_uid: self.event_drag_state.event_uid.as_deref(),
-            drag_target_date: self.event_drag_state.target_date,
+            drag_target_date: self.event_drag_state.target_date(),
         };
 
         views::render_main_content(

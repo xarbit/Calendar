@@ -94,15 +94,15 @@ fn render_drag_preview_overlay<'a>(
         return base;
     }
 
-    let Some((cursor_x, cursor_y)) = drag_state.cursor_position else {
+    let Some((cursor_x, cursor_y)) = drag_state.cursor_position() else {
         return base;
     };
 
-    let Some(ref summary) = drag_state.event_summary else {
+    let Some(summary) = drag_state.event_summary() else {
         return base;
     };
 
-    let Some(ref color_hex) = drag_state.event_color else {
+    let Some(color_hex) = drag_state.event_color() else {
         return base;
     };
 
@@ -111,7 +111,7 @@ fn render_drag_preview_overlay<'a>(
         .unwrap_or(cosmic::iced::Color::from_rgb(0.5, 0.5, 0.5));
 
     // Create the drag preview chip - styled similar to event chips
-    let preview_content = text(summary.clone())
+    let preview_content = text(summary)
         .size(11)
         .width(Length::Fill);
 
