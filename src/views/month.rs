@@ -4,6 +4,7 @@ use cosmic::widget::{column, container, row, responsive};
 use cosmic::{widget, Element};
 
 use crate::components::{render_day_cell_with_events, DayCellConfig, DisplayEvent};
+use crate::dialogs::ActiveDialog;
 use crate::models::CalendarDay;
 use crate::fl;
 use crate::locale::LocalePreferences;
@@ -31,6 +32,8 @@ pub struct MonthViewEvents<'a> {
     pub quick_event: Option<(NaiveDate, &'a str, &'a str)>,
     /// Selection state for drag selection
     pub selection: &'a SelectionState,
+    /// Active dialog state (for showing selection highlight during quick event input)
+    pub active_dialog: &'a ActiveDialog,
 }
 
 /// Render the weekday header row with responsive names
@@ -156,9 +159,14 @@ pub fn render_month_view<'a>(
             });
 
             // Check if this day is in the current drag selection range
+            // Also check if there's an active multi-day quick event that includes this date
             let (is_in_selection, selection_active) = if let Some(cell_date) = cell_date {
                 events.as_ref().map(|e| {
-                    (e.selection.contains(cell_date), e.selection.is_active)
+                    // Show highlight if: actively dragging OR in quick event date range
+                    let in_drag_selection = e.selection.contains(cell_date);
+                    let in_quick_event_range = e.active_dialog.is_date_in_quick_event_range(cell_date);
+                    let is_active = e.selection.is_active || e.active_dialog.is_multi_day_quick_event();
+                    (in_drag_selection || in_quick_event_range, is_active)
                 }).unwrap_or((false, false))
             } else {
                 (false, false)

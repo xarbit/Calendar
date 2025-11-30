@@ -360,6 +360,7 @@ impl CosmicCalendar {
             events_by_date: &self.cached_month_events,
             quick_event: quick_event_data,
             selection: &self.selection_state,
+            active_dialog: &self.active_dialog,
         };
 
         views::render_main_content(

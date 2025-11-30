@@ -160,6 +160,17 @@ impl ActiveDialog {
             _ => false,
         }
     }
+
+    /// Check if a date is within the quick event date range
+    /// Used for showing selection highlight while quick event input is open
+    pub fn is_date_in_quick_event_range(&self, date: NaiveDate) -> bool {
+        match self {
+            ActiveDialog::QuickEvent { start_date, end_date, .. } => {
+                date >= *start_date && date <= *end_date
+            }
+            _ => false,
+        }
+    }
 }
 
 /// Actions that can be performed on dialogs
