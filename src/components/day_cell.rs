@@ -10,7 +10,8 @@ use crate::components::{
 use crate::message::Message;
 use crate::styles::{
     today_circle_style, selected_day_style, day_cell_style, adjacent_month_day_style,
-    adjacent_month_selected_style, selection_highlight_style, adjacent_month_selection_style
+    adjacent_month_selected_style, selection_highlight_style, adjacent_month_selection_style,
+    drag_target_style,
 };
 use crate::ui_constants::{PADDING_DAY_CELL, SPACING_SMALL, DAY_HEADER_HEIGHT};
 
@@ -22,12 +23,14 @@ const PADDING_DAY_CELL_VERTICAL: [u16; 4] = [PADDING_DAY_CELL[0], 0, PADDING_DAY
 
 /// Apply the appropriate style to a day cell container based on state
 /// Today no longer gets special cell styling - the circle is on the day number
-/// Selected gets a border, drag selection gets highlight, regular cells get weekend background
+/// Selected gets a border, drag selection gets highlight, drop target gets accent highlight,
+/// regular cells get weekend background
 /// Uses vertical-only padding so all-day events can span edge-to-edge
 fn apply_day_cell_style<'a>(
     content: impl Into<Element<'a, Message>>,
     is_selected: bool,
     is_in_selection: bool,
+    is_drag_target: bool,
     is_weekend: bool,
 ) -> container::Container<'a, Message, cosmic::Theme> {
     let base = container(content)
@@ -35,7 +38,10 @@ fn apply_day_cell_style<'a>(
         .width(Length::Fill)
         .height(Length::Fill);
 
-    if is_selected {
+    if is_drag_target {
+        // Drop target takes priority - show where the event will land
+        base.style(move |theme: &cosmic::Theme| drag_target_style(theme, is_weekend))
+    } else if is_selected {
         base.style(|theme: &cosmic::Theme| selected_day_style(theme))
     } else if is_in_selection {
         base.style(move |theme: &cosmic::Theme| selection_highlight_style(theme, is_weekend))
@@ -70,6 +76,10 @@ pub struct DayCellConfig {
     pub selected_event_uid: Option<String>,
     /// Whether an event drag operation is currently active
     pub event_drag_active: bool,
+    /// The UID of the event currently being dragged (for dimming its original position)
+    pub dragging_event_uid: Option<String>,
+    /// Whether this cell is the current drop target
+    pub is_drag_target: bool,
 }
 
 /// Render a day cell with events and optional quick event input
@@ -166,6 +176,7 @@ pub fn render_day_cell_with_events(config: DayCellConfig) -> Element<'static, Me
                         config.week_max_slot,
                         config.selected_event_uid.as_deref(),
                         config.event_drag_active,
+                        config.dragging_event_uid.as_deref(),
                     );
 
                     // Single container for all events (placeholders + timed)
@@ -217,11 +228,12 @@ pub fn render_day_cell_with_events(config: DayCellConfig) -> Element<'static, Me
                     .into()
             }
         } else {
-            // Current month: normal styling (selected gets border, selection gets highlight)
+            // Current month: normal styling (selected gets border, selection gets highlight, drop target gets accent)
             apply_day_cell_style(
                 content,
                 config.is_selected,
                 config.is_in_selection,
+                config.is_drag_target,
                 config.is_weekend,
             ).into()
         };

@@ -325,6 +325,8 @@ impl CosmicCalendar {
             active_dialog: &self.active_dialog,
             selected_event_uid: self.selected_event_uid.as_deref(),
             event_drag_active: self.event_drag_state.is_active,
+            dragging_event_uid: self.event_drag_state.event_uid.as_deref(),
+            drag_target_date: self.event_drag_state.target_date,
         };
 
         views::render_main_content(
@@ -440,6 +442,11 @@ impl Application for CosmicCalendar {
                 // The actual condensed state is checked in update handler
                 cosmic::iced::Event::Window(cosmic::iced::window::Event::Resized { .. }) => {
                     Some(Message::WindowResized)
+                }
+                // Track mouse position for drag preview
+                // Always emit cursor move events - the handler will check if drag is active
+                cosmic::iced::Event::Mouse(cosmic::iced::mouse::Event::CursorMoved { position }) => {
+                    Some(Message::DragEventCursorMove(position.x, position.y))
                 }
                 _ => None,
             }

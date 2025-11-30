@@ -280,11 +280,14 @@ pub fn handle_message(app: &mut CosmicCalendar, message: Message) -> Task<Messag
         }
 
         // === Event Drag-and-Drop ===
-        Message::DragEventStart(uid, date) => {
-            handle_drag_event_start(app, uid, date);
+        Message::DragEventStart(uid, date, summary, color) => {
+            handle_drag_event_start(app, uid, date, summary, color);
         }
         Message::DragEventUpdate(date) => {
             handle_drag_event_update(app, date);
+        }
+        Message::DragEventCursorMove(x, y) => {
+            app.event_drag_state.update_cursor(x, y);
         }
         Message::DragEventEnd => {
             handle_drag_event_end(app);

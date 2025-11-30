@@ -17,7 +17,7 @@ mod toolbar;
 pub use calendar_dialog::{render_calendar_dialog, render_delete_calendar_dialog};
 pub use calendar_list::render_calendar_list;
 pub use event_dialog::render_event_dialog;
-pub use color_picker::{render_color_indicator, render_quick_color_picker};
+pub use color_picker::{render_color_indicator, render_quick_color_picker, parse_hex_color};
 pub use day_cell::{render_day_cell_with_events, DayCellConfig};
 pub use day_header::{render_day_header, DayHeaderConfig};
 pub use event_chip::{render_quick_event_input, render_spanning_quick_event_input, render_compact_events, render_unified_events_with_selection, quick_event_input_id, DisplayEvent};

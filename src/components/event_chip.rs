@@ -207,28 +207,35 @@ pub fn render_event_chip(event: DisplayEvent, current_date: NaiveDate) -> Elemen
 /// * `current_date` - The date of the cell being rendered
 /// * `is_selected` - Whether this event is currently selected
 /// * `is_drag_active` - Whether any event drag is currently active
+/// * `is_being_dragged` - Whether this specific event is currently being dragged (for dimming)
 pub fn render_clickable_event_chip(
     event: DisplayEvent,
     current_date: NaiveDate,
     is_selected: bool,
     is_drag_active: bool,
+    is_being_dragged: bool,
 ) -> Element<'static, Message> {
     let uid = event.uid.clone();
     let color = parse_hex_color(&event.color).unwrap_or(COLOR_DEFAULT_GRAY);
+    // Clone summary and color_hex for the drag preview message (before they're moved into chip)
+    let drag_summary = event.summary.clone();
+    let drag_color = event.color.clone();
 
     let chip = if event.all_day {
         let span_position = event.span_position_for_date(current_date);
-        render_all_day_chip_selectable(event.summary, color, span_position, is_selected)
+        render_all_day_chip_selectable(event.summary, color, span_position, is_selected, is_being_dragged)
     } else {
-        render_timed_event_chip_selectable(event.summary, event.start_time, color, is_selected)
+        render_timed_event_chip_selectable(event.summary, event.start_time, color, is_selected, is_being_dragged)
     };
 
     // Wrap with mouse area for click/drag handling
     // - on_press: Start drag (will be resolved as select or move on release)
-    // - on_release: End drag (handled at day cell level)
+    // - on_release: End drag (complete move or select if no movement)
     // - on_double_click: Open edit dialog
+    // Pass summary and color for the floating drag preview
     let mut area = mouse_area(chip)
-        .on_press(Message::DragEventStart(uid.clone(), current_date))
+        .on_press(Message::DragEventStart(uid.clone(), current_date, drag_summary, drag_color))
+        .on_release(Message::DragEventEnd)
         .on_double_click(Message::OpenEditEventDialog(uid));
 
     // Only track mouse enter during active drag for performance
@@ -239,12 +246,13 @@ pub fn render_clickable_event_chip(
     area.into()
 }
 
-/// Render an all-day event chip with selection highlight
+/// Render an all-day event chip with selection highlight and drag dimming
 fn render_all_day_chip_selectable(
     summary: String,
     color: cosmic::iced::Color,
     span_position: SpanPosition,
     is_selected: bool,
+    is_being_dragged: bool,
 ) -> Element<'static, Message> {
     let radius = BORDER_RADIUS[0];
     let border_radius: [f32; 4] = match span_position {
@@ -266,6 +274,10 @@ fn render_all_day_chip_selectable(
         .wrapping(Wrapping::None)
         .into();
 
+    // Dim opacity when being dragged to show it's in motion
+    let base_opacity = if is_being_dragged { 0.15 } else if is_selected { 0.5 } else { 0.3 };
+    let text_opacity = if is_being_dragged { 0.4 } else { 1.0 };
+
     container(content)
         .padding(padding)
         .width(Length::Fill)
@@ -273,33 +285,37 @@ fn render_all_day_chip_selectable(
         .style(move |_theme: &cosmic::Theme| {
             container::Style {
                 background: Some(cosmic::iced::Background::Color(
-                    color.scale_alpha(if is_selected { 0.5 } else { 0.3 })
+                    color.scale_alpha(base_opacity)
                 )),
                 border: cosmic::iced::Border {
                     color: if is_selected { color } else { cosmic::iced::Color::TRANSPARENT },
                     width: if is_selected { BORDER_WIDTH_HIGHLIGHT } else { 0.0 },
                     radius: border_radius.into(),
                 },
-                text_color: Some(color),
+                text_color: Some(color.scale_alpha(text_opacity)),
                 ..Default::default()
             }
         })
         .into()
 }
 
-/// Render a timed event chip with selection highlight
+/// Render a timed event chip with selection highlight and drag dimming
 fn render_timed_event_chip_selectable(
     summary: String,
     start_time: Option<NaiveTime>,
     color: cosmic::iced::Color,
     is_selected: bool,
+    is_being_dragged: bool,
 ) -> Element<'static, Message> {
+    // Dim opacity when being dragged
+    let dot_opacity = if is_being_dragged { 0.3 } else { 1.0 };
+
     let dot = container(widget::text(""))
         .width(Length::Fixed(TIMED_EVENT_DOT_SIZE))
         .height(Length::Fixed(TIMED_EVENT_DOT_SIZE))
         .style(move |_theme: &cosmic::Theme| {
             container::Style {
-                background: Some(cosmic::iced::Background::Color(color)),
+                background: Some(cosmic::iced::Background::Color(color.scale_alpha(dot_opacity))),
                 border: cosmic::iced::Border {
                     color: cosmic::iced::Color::TRANSPARENT,
                     width: 0.0,
@@ -329,7 +345,13 @@ fn render_timed_event_chip_selectable(
     .width(Length::Fill)
     .clip(true)
     .style(move |_theme: &cosmic::Theme| {
-        if is_selected {
+        if is_being_dragged {
+            // Dimmed style when being dragged
+            container::Style {
+                text_color: Some(cosmic::iced::Color::from_rgba(0.5, 0.5, 0.5, 0.5)),
+                ..Default::default()
+            }
+        } else if is_selected {
             container::Style {
                 background: Some(cosmic::iced::Background::Color(color.scale_alpha(0.15))),
                 border: cosmic::iced::Border {
@@ -453,7 +475,7 @@ pub fn render_unified_events(
     current_date: NaiveDate,
     week_max_slot: Option<usize>,
 ) -> UnifiedEventsResult {
-    render_unified_events_with_selection(events, max_visible, current_date, week_max_slot, None, false)
+    render_unified_events_with_selection(events, max_visible, current_date, week_max_slot, None, false, None)
 }
 
 /// Render events as a unified column with selection support.
@@ -465,6 +487,7 @@ pub fn render_unified_events(
 /// * `current_date` - The date of the cell
 /// * `week_max_slot` - Maximum slot index for the week (determines placeholder count)
 /// * `selected_event_uid` - UID of the currently selected event (if any)
+/// * `dragging_event_uid` - UID of the event currently being dragged (if any)
 pub fn render_unified_events_with_selection(
     events: Vec<DisplayEvent>,
     max_visible: usize,
@@ -472,6 +495,7 @@ pub fn render_unified_events_with_selection(
     week_max_slot: Option<usize>,
     selected_event_uid: Option<&str>,
     is_drag_active: bool,
+    dragging_event_uid: Option<&str>,
 ) -> UnifiedEventsResult {
     // Separate all-day and timed events
     let (all_day_events, mut timed_events): (Vec<_>, Vec<_>) =
@@ -507,7 +531,8 @@ pub fn render_unified_events_with_selection(
             break;
         }
         let is_selected = selected_event_uid.map_or(false, |uid| uid == event.uid);
-        col = col.push(render_clickable_event_chip(event, current_date, is_selected, is_drag_active));
+        let is_being_dragged = dragging_event_uid.map_or(false, |uid| uid == event.uid);
+        col = col.push(render_clickable_event_chip(event, current_date, is_selected, is_drag_active, is_being_dragged));
         shown += 1;
     }
 

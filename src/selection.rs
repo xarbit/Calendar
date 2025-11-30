@@ -176,6 +176,12 @@ pub struct EventDragState {
     pub target_date: Option<NaiveDate>,
     /// Whether a drag operation is currently active
     pub is_active: bool,
+    /// Current cursor position for rendering drag preview (x, y)
+    pub cursor_position: Option<(f32, f32)>,
+    /// Event summary for the drag preview
+    pub event_summary: Option<String>,
+    /// Event color (hex) for the drag preview
+    pub event_color: Option<String>,
 }
 
 impl EventDragState {
@@ -184,13 +190,23 @@ impl EventDragState {
         Self::default()
     }
 
-    /// Start dragging an event
-    pub fn start(&mut self, event_uid: String, original_date: NaiveDate) {
+    /// Start dragging an event with display info for the preview
+    pub fn start(&mut self, event_uid: String, original_date: NaiveDate, summary: String, color: String) {
         debug!("EventDragState: Starting drag for event {} from {}", event_uid, original_date);
         self.event_uid = Some(event_uid);
         self.original_date = Some(original_date);
         self.target_date = Some(original_date);
         self.is_active = true;
+        self.event_summary = Some(summary);
+        self.event_color = Some(color);
+        self.cursor_position = None;
+    }
+
+    /// Update cursor position during drag
+    pub fn update_cursor(&mut self, x: f32, y: f32) {
+        if self.is_active {
+            self.cursor_position = Some((x, y));
+        }
     }
 
     /// Update the target date during drag
@@ -235,6 +251,9 @@ impl EventDragState {
         self.original_date = None;
         self.target_date = None;
         self.is_active = false;
+        self.cursor_position = None;
+        self.event_summary = None;
+        self.event_color = None;
     }
 
     /// Get the date offset (number of days to move)
@@ -377,12 +396,14 @@ mod tests {
         let mut state = EventDragState::new();
         let date = NaiveDate::from_ymd_opt(2024, 1, 15).unwrap();
 
-        state.start("event-123".to_string(), date);
+        state.start("event-123".to_string(), date, "Test Event".to_string(), "#0000ff".to_string());
 
         assert!(state.is_active);
         assert_eq!(state.event_uid, Some("event-123".to_string()));
         assert_eq!(state.original_date, Some(date));
         assert_eq!(state.target_date, Some(date));
+        assert_eq!(state.event_summary, Some("Test Event".to_string()));
+        assert_eq!(state.event_color, Some("#0000ff".to_string()));
     }
 
     #[test]
@@ -391,7 +412,7 @@ mod tests {
         let original = NaiveDate::from_ymd_opt(2024, 1, 15).unwrap();
         let target = NaiveDate::from_ymd_opt(2024, 1, 18).unwrap();
 
-        state.start("event-123".to_string(), original);
+        state.start("event-123".to_string(), original, "Test Event".to_string(), "#0000ff".to_string());
         state.update(target);
 
         assert!(state.is_active);
@@ -405,7 +426,7 @@ mod tests {
         let original = NaiveDate::from_ymd_opt(2024, 1, 15).unwrap();
         let target = NaiveDate::from_ymd_opt(2024, 1, 18).unwrap();
 
-        state.start("event-123".to_string(), original);
+        state.start("event-123".to_string(), original, "Test Event".to_string(), "#0000ff".to_string());
         state.update(target);
         let result = state.end();
 
@@ -422,7 +443,7 @@ mod tests {
         let mut state = EventDragState::new();
         let date = NaiveDate::from_ymd_opt(2024, 1, 15).unwrap();
 
-        state.start("event-123".to_string(), date);
+        state.start("event-123".to_string(), date, "Test Event".to_string(), "#0000ff".to_string());
         // Don't update - target stays same as original
         let result = state.end();
 
@@ -436,7 +457,7 @@ mod tests {
         let original = NaiveDate::from_ymd_opt(2024, 1, 15).unwrap();
         let target = NaiveDate::from_ymd_opt(2024, 1, 18).unwrap();
 
-        state.start("event-123".to_string(), original);
+        state.start("event-123".to_string(), original, "Test Event".to_string(), "#0000ff".to_string());
         state.update(target);
 
         assert_eq!(state.get_offset(), Some(3)); // 3 days forward
@@ -447,11 +468,13 @@ mod tests {
         let mut state = EventDragState::new();
         let date = NaiveDate::from_ymd_opt(2024, 1, 15).unwrap();
 
-        state.start("event-123".to_string(), date);
+        state.start("event-123".to_string(), date, "Test Event".to_string(), "#0000ff".to_string());
         assert!(state.is_active);
 
         state.cancel();
         assert!(!state.is_active);
         assert!(state.event_uid.is_none());
+        assert!(state.event_summary.is_none());
+        assert!(state.event_color.is_none());
     }
 }

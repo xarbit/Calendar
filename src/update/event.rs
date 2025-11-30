@@ -122,14 +122,21 @@ pub fn handle_select_event(app: &mut CosmicCalendar, uid: String) {
 // === Event Drag Handlers ===
 
 /// Start dragging an event to move it to a new date
-pub fn handle_drag_event_start(app: &mut CosmicCalendar, uid: String, original_date: NaiveDate) {
-    debug!("handle_drag_event_start: uid={}, date={}", uid, original_date);
+/// Takes the event UID, original date, summary (for preview), and color (for preview)
+pub fn handle_drag_event_start(
+    app: &mut CosmicCalendar,
+    uid: String,
+    original_date: NaiveDate,
+    summary: String,
+    color: String,
+) {
+    debug!("handle_drag_event_start: uid={}, date={}, summary={}", uid, original_date, summary);
 
     // Cancel any day selection in progress
     app.selection_state.cancel();
 
-    // Start the drag operation
-    app.event_drag_state.start(uid, original_date);
+    // Start the drag operation with display info for the preview
+    app.event_drag_state.start(uid, original_date, summary, color);
 }
 
 /// Update the drag target date as user drags over cells

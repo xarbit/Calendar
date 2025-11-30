@@ -75,6 +75,10 @@ pub struct MonthViewEvents<'a> {
     pub selected_event_uid: Option<&'a str>,
     /// Whether an event drag operation is currently active
     pub event_drag_active: bool,
+    /// The UID of the event currently being dragged (for dimming original)
+    pub dragging_event_uid: Option<&'a str>,
+    /// The current drop target date during drag (for highlighting target cell)
+    pub drag_target_date: Option<NaiveDate>,
 }
 
 /// Render the weekday header row with responsive names
@@ -331,6 +335,7 @@ fn render_date_events_overlay<'a>(
     compact: bool,
     selected_event_uid: Option<&str>,
     event_drag_active: bool,
+    dragging_event_uid: Option<&str>,
 ) -> Option<Element<'a, Message>> {
     let segments = collect_date_event_segments(weeks, events_by_date);
 
@@ -410,6 +415,7 @@ fn render_date_events_overlay<'a>(
                     // Render the spanning chip (full or compact based on mode)
                     let span_cols = seg.end_col - seg.start_col + 1;
                     let is_selected = selected_event_uid == Some(seg.uid.as_str());
+                    let is_being_dragged = dragging_event_uid == Some(seg.uid.as_str());
                     let chip = if compact {
                         render_compact_date_event_chip(
                             seg.color.clone(),
@@ -427,6 +433,7 @@ fn render_date_events_overlay<'a>(
                             is_selected,
                             seg.event_start_date,
                             event_drag_active,
+                            is_being_dragged,
                         )
                     };
 
@@ -533,6 +540,7 @@ fn render_date_event_chip(
     is_selected: bool,
     event_start_date: NaiveDate,
     is_drag_active: bool,
+    is_being_dragged: bool,
 ) -> Element<'static, Message> {
     let color = parse_hex_color(&color_hex).unwrap_or(COLOR_DEFAULT_GRAY);
 
@@ -547,6 +555,9 @@ fn render_date_event_chip(
         (false, false) => [0.0, 0.0, 0.0, 0.0],             // Continues through
     };
 
+    // Clone summary for the drag preview message (needed because text widget moves it)
+    let drag_summary = summary.clone();
+
     let content: Element<'static, Message> = if show_text {
         widget::text(summary)
             .size(11)
@@ -558,6 +569,10 @@ fn render_date_event_chip(
             .into()
     };
 
+    // Dim opacity when being dragged to show it's in motion
+    let base_opacity = if is_being_dragged { 0.15 } else if is_selected { 0.5 } else { 0.3 };
+    let text_opacity = if is_being_dragged { 0.4 } else { 1.0 };
+
     let chip = container(content)
         .padding([2, 4, 2, 4])
         .width(Length::Fill)
@@ -565,14 +580,14 @@ fn render_date_event_chip(
         .style(move |_theme: &cosmic::Theme| {
             container::Style {
                 background: Some(cosmic::iced::Background::Color(
-                    color.scale_alpha(if is_selected { 0.5 } else { 0.3 })
+                    color.scale_alpha(base_opacity)
                 )),
                 border: cosmic::iced::Border {
                     color: if is_selected { color } else { cosmic::iced::Color::TRANSPARENT },
                     width: if is_selected { BORDER_WIDTH_HIGHLIGHT } else { 0.0 },
                     radius: border_radius.into(),
                 },
-                text_color: Some(color),
+                text_color: Some(color.scale_alpha(text_opacity)),
                 ..Default::default()
             }
         });
@@ -580,8 +595,10 @@ fn render_date_event_chip(
     // Wrap with mouse area for drag and click handling
     // Use DragEventStart on press (like timed events) - if released without moving,
     // handle_drag_event_end will treat it as a selection click
+    // Pass summary and color_hex for the floating drag preview
     let mut area = mouse_area(chip)
-        .on_press(Message::DragEventStart(uid.clone(), event_start_date))
+        .on_press(Message::DragEventStart(uid.clone(), event_start_date, drag_summary, color_hex))
+        .on_release(Message::DragEventEnd)
         .on_double_click(Message::OpenEditEventDialog(uid));
 
     // Track mouse movement during active drag to update target
@@ -705,6 +722,17 @@ pub fn render_month_view<'a>(
                 .map(|e| e.event_drag_active)
                 .unwrap_or(false);
 
+            // Get the UID of the event being dragged (for dimming its original position)
+            let dragging_event_uid = events.as_ref()
+                .and_then(|e| e.dragging_event_uid)
+                .map(|s| s.to_string());
+
+            // Check if this cell is the current drop target
+            let is_drag_target = cell_date.is_some() && events.as_ref()
+                .and_then(|e| e.drag_target_date)
+                .map(|target| cell_date == Some(target))
+                .unwrap_or(false);
+
             let cell = render_day_cell_with_events(DayCellConfig {
                 year,
                 month,
@@ -721,6 +749,8 @@ pub fn render_month_view<'a>(
                 selection_active,
                 selected_event_uid,
                 event_drag_active,
+                dragging_event_uid,
+                is_drag_target,
             });
 
             week_row = week_row.push(
@@ -756,6 +786,7 @@ pub fn render_month_view<'a>(
         let week_number_offset = if show_week_numbers { WEEK_NUMBER_WIDTH } else { 0.0 };
         let selected_uid = e.selected_event_uid.map(|s| s.to_string());
         let event_drag_active = e.event_drag_active;
+        let dragging_uid = e.dragging_event_uid.map(|s| s.to_string());
 
         let responsive_overlay = responsive(move |size: Size| {
             // Calculate approximate cell width (7 days + spacing)
@@ -777,6 +808,7 @@ pub fn render_month_view<'a>(
                 compact,
                 selected_uid.as_deref(),
                 event_drag_active,
+                dragging_uid.as_deref(),
             ) {
                 overlay
             } else {
