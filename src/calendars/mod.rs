@@ -227,6 +227,7 @@ impl CalendarManager {
                                     color: calendar_color.clone(),
                                     all_day: true,
                                     start_time: None,
+                                    end_time: None,
                                     span_start: Some(event_start),
                                     span_end: Some(event_end),
                                 };
@@ -240,15 +241,22 @@ impl CalendarManager {
                     } else {
                         // Single-day event: only add to start date
                         if event_start >= range_start && event_start <= range_end {
-                            // Extract start time for timed events
-                            let start_time = if event.all_day {
-                                None
+                            // Extract start and end time for timed events
+                            let (start_time, end_time) = if event.all_day {
+                                (None, None)
                             } else {
-                                Some(chrono::NaiveTime::from_hms_opt(
-                                    event.start.hour(),
-                                    event.start.minute(),
-                                    0,
-                                ).unwrap_or_default())
+                                (
+                                    Some(chrono::NaiveTime::from_hms_opt(
+                                        event.start.hour(),
+                                        event.start.minute(),
+                                        0,
+                                    ).unwrap_or_default()),
+                                    Some(chrono::NaiveTime::from_hms_opt(
+                                        event.end.hour(),
+                                        event.end.minute(),
+                                        0,
+                                    ).unwrap_or_default()),
+                                )
                             };
 
                             let display_event = DisplayEvent {
@@ -257,6 +265,100 @@ impl CalendarManager {
                                 color: calendar_color.clone(),
                                 all_day: event.all_day,
                                 start_time,
+                                end_time,
+                                span_start: None,
+                                span_end: None,
+                            };
+                            events_by_date
+                                .entry(event_start)
+                                .or_default()
+                                .push(display_event);
+                        }
+                    }
+                }
+            }
+        }
+
+        events_by_date
+    }
+
+    /// Get events for a specific week grouped by date, with calendar colors.
+    /// Returns a HashMap where key is NaiveDate and value is Vec of DisplayEvents.
+    pub fn get_display_events_for_week(&self, week_days: &[chrono::NaiveDate]) -> HashMap<chrono::NaiveDate, Vec<DisplayEvent>> {
+        use chrono::NaiveDate;
+
+        let mut events_by_date: HashMap<NaiveDate, Vec<DisplayEvent>> = HashMap::new();
+
+        if week_days.is_empty() {
+            return events_by_date;
+        }
+
+        let range_start = week_days[0];
+        let range_end = week_days[week_days.len() - 1];
+
+        for source in &self.sources {
+            if !source.is_enabled() {
+                continue;
+            }
+
+            let calendar_color = source.info().color.clone();
+
+            if let Ok(events) = source.fetch_events() {
+                for event in events {
+                    let event_start = event.start.date_naive();
+                    let event_end = event.end.date_naive();
+
+                    // For all-day/multi-day events, add to each day in the range
+                    if event.all_day && event_end > event_start {
+                        // Multi-day event: iterate through each day
+                        let mut current = event_start;
+                        while current <= event_end && current <= range_end {
+                            if current >= range_start {
+                                let display_event = DisplayEvent {
+                                    uid: event.uid.clone(),
+                                    summary: event.summary.clone(),
+                                    color: calendar_color.clone(),
+                                    all_day: true,
+                                    start_time: None,
+                                    end_time: None,
+                                    span_start: Some(event_start),
+                                    span_end: Some(event_end),
+                                };
+                                events_by_date
+                                    .entry(current)
+                                    .or_default()
+                                    .push(display_event);
+                            }
+                            current = current.succ_opt().unwrap_or(current);
+                        }
+                    } else {
+                        // Single-day event: only add to start date
+                        if event_start >= range_start && event_start <= range_end {
+                            // Extract start and end time for timed events
+                            let (start_time, end_time) = if event.all_day {
+                                (None, None)
+                            } else {
+                                (
+                                    Some(chrono::NaiveTime::from_hms_opt(
+                                        event.start.hour(),
+                                        event.start.minute(),
+                                        0,
+                                    ).unwrap_or_default()),
+                                    Some(chrono::NaiveTime::from_hms_opt(
+                                        event.end.hour(),
+                                        event.end.minute(),
+                                        0,
+                                    ).unwrap_or_default()),
+                                )
+                            };
+
+                            let display_event = DisplayEvent {
+                                uid: event.uid.clone(),
+                                summary: event.summary.clone(),
+                                color: calendar_color.clone(),
+                                all_day: event.all_day,
+                                start_time,
+                                end_time,
                                 span_start: None,
                                 span_end: None,
                             };
