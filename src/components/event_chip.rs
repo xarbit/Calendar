@@ -149,7 +149,7 @@ pub fn render_quick_event_input(
 pub fn render_spanning_quick_event_input(
     text: String,
     calendar_color: String,
-    span_columns: usize,
+    _span_columns: usize, // Reserved for future layout adjustments
 ) -> Element<'static, Message> {
     let color = parse_hex_color(&calendar_color).unwrap_or(COLOR_DEFAULT_GRAY);
 

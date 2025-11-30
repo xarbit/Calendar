@@ -24,8 +24,9 @@
 mod local;
 mod caldav;
 
-pub use local::LocalProtocol;
-pub use caldav::CalDavProtocol;
+// Internal use only - LocalProtocol used in tests, CalDavProtocol for future remote calendar support
+#[allow(unused_imports)]
+pub(crate) use local::LocalProtocol;
 
 use crate::caldav::CalendarEvent;
 use std::error::Error;

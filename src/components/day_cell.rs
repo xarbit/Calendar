@@ -9,7 +9,7 @@ use crate::styles::{
     today_circle_style, selected_day_style, day_cell_style, adjacent_month_day_style,
     adjacent_month_selected_style, selection_highlight_style, adjacent_month_selection_style
 };
-use crate::ui_constants::{PADDING_DAY_CELL, SPACING_TINY, SPACING_SMALL};
+use crate::ui_constants::{PADDING_DAY_CELL, SPACING_SMALL};
 
 /// Size of the circle behind today's day number
 const TODAY_CIRCLE_SIZE: f32 = 32.0;

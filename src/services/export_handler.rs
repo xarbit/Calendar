@@ -6,7 +6,7 @@
 use crate::caldav::CalendarEvent;
 use crate::calendars::CalendarManager;
 use icalendar::{Calendar, Component, Event, EventLike};
-use log::{debug, error, info, warn};
+use log::{debug, error, info};
 use std::error::Error;
 use std::fs;
 use std::path::Path;

@@ -73,7 +73,6 @@ impl LocalCalendar {
 
     /// Get events for a specific date
     pub fn get_events_for_date(&self, date: chrono::NaiveDate) -> Vec<&CalendarEvent> {
-        use chrono::Datelike;
         self.cached_events
             .iter()
             .filter(|e| e.start.date_naive() == date)

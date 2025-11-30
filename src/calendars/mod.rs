@@ -3,7 +3,7 @@ mod caldav_calendar;
 mod config;
 mod local_calendar;
 
-pub use calendar_source::{CalendarSource, CalendarType, CalendarInfo};
+pub use calendar_source::{CalendarSource, CalendarType};
 pub use config::{CalendarConfig, CalendarManagerConfig};
 pub use local_calendar::LocalCalendar;
 
@@ -11,7 +11,7 @@ use crate::caldav::CalendarEvent;
 use crate::components::DisplayEvent;
 use crate::database::Database;
 use chrono::{Datelike, Timelike};
-use log::{debug, error, info, warn};
+use log::{debug, info};
 use std::collections::HashMap;
 use std::error::Error;
 use std::sync::{Arc, Mutex};

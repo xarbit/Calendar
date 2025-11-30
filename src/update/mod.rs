@@ -15,12 +15,30 @@ mod selection;
 
 use chrono::{NaiveDate, Timelike};
 use cosmic::app::Task;
-use log::{debug, info, warn};
+use log::{debug, info};
 
 use crate::app::CosmicCalendar;
 use crate::dialogs::DialogManager;
 use crate::message::Message;
 use crate::services::SettingsHandler;
+
+/// Helper to dismiss empty quick events on focus-loss actions (navigation, day selection)
+/// This centralizes the pattern of clearing transient UI state when the user navigates away
+#[inline]
+fn dismiss_on_focus_loss(app: &mut CosmicCalendar) {
+    DialogManager::dismiss_empty_quick_event(&mut app.active_dialog);
+}
+
+/// Close all legacy dialog fields (deprecated, will be removed after full migration)
+/// This helper centralizes the cleanup of old dialog state fields
+#[allow(deprecated)]
+#[inline]
+fn close_legacy_dialogs(app: &mut CosmicCalendar) {
+    app.event_dialog = None;
+    app.calendar_dialog = None;
+    app.delete_calendar_dialog = None;
+    app.color_picker_open = None;
+}
 
 // Re-export handlers for use in this module
 use calendar::{
@@ -57,61 +75,43 @@ pub fn handle_message(app: &mut CosmicCalendar, message: Message) -> Task<Messag
         }
         Message::CloseDialog => {
             debug!("Message::CloseDialog: Closing dialogs");
-            // Close all legacy dialog fields
-            #[allow(deprecated)]
-            {
-                app.event_dialog = None;
-                app.calendar_dialog = None;
-                app.delete_calendar_dialog = None;
-                app.color_picker_open = None;
-            }
+            close_legacy_dialogs(app);
             // For quick events: only dismiss if empty (focus loss behavior)
             // For other dialogs: close unconditionally
             if app.active_dialog.is_quick_event() {
-                DialogManager::dismiss_empty_quick_event(&mut app.active_dialog);
+                dismiss_on_focus_loss(app);
             } else {
                 DialogManager::close(&mut app.active_dialog);
             }
         }
 
         // === View Navigation ===
+        // All navigation actions dismiss empty quick events (focus loss behavior)
         Message::ChangeView(view) => {
-            // Dismiss empty quick event when changing views (focus loss)
-            DialogManager::dismiss_empty_quick_event(&mut app.active_dialog);
-            // When changing views, sync views to the selected_date so the new view
-            // shows the period containing the anchor date
+            dismiss_on_focus_loss(app);
             app.current_view = view;
             app.sync_views_to_selected_date();
         }
         Message::PreviousPeriod => {
-            // Dismiss empty quick event when navigating (focus loss)
-            DialogManager::dismiss_empty_quick_event(&mut app.active_dialog);
+            dismiss_on_focus_loss(app);
             handle_previous_period(app);
         }
         Message::NextPeriod => {
-            // Dismiss empty quick event when navigating (focus loss)
-            DialogManager::dismiss_empty_quick_event(&mut app.active_dialog);
+            dismiss_on_focus_loss(app);
             handle_next_period(app);
         }
         Message::Today => {
-            // Dismiss empty quick event when navigating to today (focus loss)
-            DialogManager::dismiss_empty_quick_event(&mut app.active_dialog);
-            // Today button navigates to today in all views
+            dismiss_on_focus_loss(app);
             app.navigate_to_today();
         }
         Message::SelectDay(year, month, day) => {
-            // Dismiss empty quick event when clicking on a day (focus loss)
-            DialogManager::dismiss_empty_quick_event(&mut app.active_dialog);
-            // Set the selected date - this syncs all views automatically
+            dismiss_on_focus_loss(app);
             if let Some(date) = NaiveDate::from_ymd_opt(year, month, day) {
                 app.set_selected_date(date);
             }
         }
         Message::SelectDayNoNavigate(date) => {
-            // Dismiss empty quick event when clicking on a day (focus loss)
-            DialogManager::dismiss_empty_quick_event(&mut app.active_dialog);
-            // Set selected date without navigating (for adjacent month days)
-            // Only updates the selected_date, doesn't sync views to that date's month
+            dismiss_on_focus_loss(app);
             app.selected_date = date;
         }
 

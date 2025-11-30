@@ -1,10 +1,10 @@
 use chrono::{DateTime, Utc};
-use log::{debug, error, info, trace};
+use log::{debug, info};
 use rusqlite::{Connection, params, Result as SqlResult};
 use std::error::Error;
 use std::path::PathBuf;
 
-use crate::caldav::{AlertTime, CalendarEvent, RepeatFrequency, TravelTime};
+use crate::caldav::CalendarEvent;
 
 /// Current database schema version for migrations
 const SCHEMA_VERSION: i32 = 2;
@@ -368,6 +368,7 @@ impl Database {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::caldav::{AlertTime, RepeatFrequency, TravelTime};
     use chrono::TimeZone;
 
     #[test]
