@@ -30,7 +30,7 @@
 //! in `CosmicCalendar` because `text_editor::Content` doesn't implement `Clone`.
 //! The centralized `Message::CloseDialog` handler closes all legacy dialog fields.
 
-use chrono::NaiveDate;
+use chrono::{NaiveDate, NaiveTime};
 use log::{debug, info};
 
 /// Identifies which dialog or transient UI element is currently active.
@@ -48,12 +48,17 @@ pub enum ActiveDialog {
     /// Quick event input for single or multi-day events
     /// - Single day (start == end): double-click on a day
     /// - Multi-day (start != end): drag selection across days
+    /// - Timed event: drag selection on hour cells in week/day view
     /// The input appears on the start date
     QuickEvent {
         /// Start date of the event
         start_date: NaiveDate,
         /// End date of the event (same as start for single-day)
         end_date: NaiveDate,
+        /// Start time (None for all-day events)
+        start_time: Option<NaiveTime>,
+        /// End time (None for all-day events)
+        end_time: Option<NaiveTime>,
         /// Event title being typed
         text: String,
     },
@@ -138,11 +143,26 @@ impl ActiveDialog {
     /// Get full quick event range if editing (start_date, end_date, text)
     pub fn quick_event_range(&self) -> Option<(NaiveDate, NaiveDate, &str)> {
         match self {
-            ActiveDialog::QuickEvent { start_date, end_date, text } => {
+            ActiveDialog::QuickEvent { start_date, end_date, text, .. } => {
                 Some((*start_date, *end_date, text))
             }
             _ => None,
         }
+    }
+
+    /// Get quick event times if this is a timed event
+    pub fn quick_event_times(&self) -> Option<(NaiveTime, NaiveTime)> {
+        match self {
+            ActiveDialog::QuickEvent { start_time: Some(start), end_time: Some(end), .. } => {
+                Some((*start, *end))
+            }
+            _ => None,
+        }
+    }
+
+    /// Check if the quick event is a timed event (has times)
+    pub fn is_timed_quick_event(&self) -> bool {
+        matches!(self, ActiveDialog::QuickEvent { start_time: Some(_), .. })
     }
 
     /// Check if the quick event spans multiple days
@@ -184,6 +204,8 @@ pub enum DialogAction {
     StartQuickEvent(NaiveDate),
     /// Start a quick event spanning a date range (drag selection)
     StartQuickEventRange { start: NaiveDate, end: NaiveDate },
+    /// Start a quick timed event with specific times (time slot selection in week/day view)
+    StartQuickTimedEvent { date: NaiveDate, start_time: NaiveTime, end_time: NaiveTime },
     /// Update quick event text while typing
     QuickEventTextChanged(String),
     /// Commit the quick event (create the event)
@@ -277,6 +299,8 @@ impl DialogManager {
                     ActiveDialog::QuickEvent {
                         start_date: date,
                         end_date: date,
+                        start_time: None,
+                        end_time: None,
                         text: String::new(),
                     },
                 );
@@ -288,6 +312,21 @@ impl DialogManager {
                     ActiveDialog::QuickEvent {
                         start_date: start,
                         end_date: end,
+                        start_time: None,
+                        end_time: None,
+                        text: String::new(),
+                    },
+                );
+                None
+            }
+            DialogAction::StartQuickTimedEvent { date, start_time, end_time } => {
+                Self::open(
+                    current,
+                    ActiveDialog::QuickEvent {
+                        start_date: date,
+                        end_date: date,
+                        start_time: Some(start_time),
+                        end_time: Some(end_time),
                         text: String::new(),
                     },
                 );
@@ -301,10 +340,12 @@ impl DialogManager {
             }
             DialogAction::CommitQuickEvent => {
                 // Extract the data before closing, return it for the caller to process
-                if let ActiveDialog::QuickEvent { start_date, end_date, text } = current {
+                if let ActiveDialog::QuickEvent { start_date, end_date, start_time, end_time, text } = current {
                     let result = QuickEventResult {
                         start_date: *start_date,
                         end_date: *end_date,
+                        start_time: *start_time,
+                        end_time: *end_time,
                         text: text.clone(),
                     };
                     *current = ActiveDialog::None;
@@ -391,6 +432,10 @@ pub struct QuickEventResult {
     pub start_date: NaiveDate,
     /// End date of the event (same as start for single-day)
     pub end_date: NaiveDate,
+    /// Start time (None for all-day events)
+    pub start_time: Option<NaiveTime>,
+    /// End time (None for all-day events)
+    pub end_time: Option<NaiveTime>,
     /// Event title
     pub text: String,
 }
@@ -399,6 +444,11 @@ impl QuickEventResult {
     /// Check if this is a multi-day event
     pub fn is_multi_day(&self) -> bool {
         self.start_date != self.end_date
+    }
+
+    /// Check if this is a timed event (has times)
+    pub fn is_timed(&self) -> bool {
+        self.start_time.is_some()
     }
 }
 

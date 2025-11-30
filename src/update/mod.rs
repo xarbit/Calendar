@@ -57,11 +57,12 @@ use event::{
     handle_confirm_event_dialog, handle_delete_event, handle_drag_event_cancel,
     handle_drag_event_end, handle_drag_event_start, handle_drag_event_update,
     handle_open_edit_event_dialog, handle_open_new_event_dialog, handle_quick_event_text_changed,
-    handle_select_event, handle_start_quick_event,
+    handle_select_event, handle_start_quick_event, handle_start_quick_timed_event,
 };
 use navigation::{handle_next_period, handle_previous_period};
 use selection::{
     handle_selection_cancel, handle_selection_end, handle_selection_start, handle_selection_update,
+    handle_time_selection_start, handle_time_selection_update, handle_time_selection_end,
 };
 
 /// Handle all application messages and update state
@@ -258,9 +259,30 @@ pub fn handle_message(app: &mut CosmicCalendar, message: Message) -> Task<Messag
             handle_selection_cancel(app);
         }
 
+        // === Time-Based Selection - Drag Selection for Timed Events ===
+        Message::TimeSelectionStart(date, time) => {
+            // Cancel any empty quick event when starting a selection
+            DialogManager::dismiss_empty_quick_event(&mut app.active_dialog);
+            handle_time_selection_start(app, date, time);
+        }
+        Message::TimeSelectionUpdate(date, time) => {
+            handle_time_selection_update(app, date, time);
+        }
+        Message::TimeSelectionEnd => {
+            handle_time_selection_end(app);
+            // Focus the quick event input if a quick event was started
+            if app.active_dialog.is_quick_event() {
+                return focus_quick_event_input();
+            }
+        }
+
         // === Event Management - Quick Events ===
         Message::StartQuickEvent(date) => {
             handle_start_quick_event(app, date);
+            return focus_quick_event_input();
+        }
+        Message::StartQuickTimedEvent(date, start_time, end_time) => {
+            handle_start_quick_timed_event(app, date, start_time, end_time);
             return focus_quick_event_input();
         }
         Message::QuickEventTextChanged(text) => {

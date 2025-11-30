@@ -1,20 +1,23 @@
 use chrono::{Datelike, NaiveDate, NaiveTime, Timelike};
 use cosmic::iced::{alignment, Background, Border, Length};
 use cosmic::iced::widget::stack;
+use cosmic::iced_widget::text_input;
 use cosmic::widget::{column, container, mouse_area, row, scrollable};
 use cosmic::{widget, Element};
 use std::collections::HashMap;
 
-use crate::components::{DisplayEvent, parse_hex_color};
+use crate::components::{DisplayEvent, parse_hex_color, quick_event_input_id};
+use crate::dialogs::ActiveDialog;
 use crate::locale::LocalePreferences;
 use crate::localized_names;
 use crate::message::Message;
 use crate::models::WeekState;
+use crate::selection::SelectionState;
 use crate::styles::today_filled_style;
 use crate::ui_constants::{
     PADDING_SMALL, FONT_SIZE_SMALL, FONT_SIZE_MEDIUM, COLOR_DAY_CELL_BORDER,
     HOUR_ROW_HEIGHT, TIME_LABEL_WIDTH, COLOR_WEEKEND_BACKGROUND, BORDER_WIDTH_THIN,
-    SPACING_TINY, COLOR_CURRENT_TIME,
+    SPACING_TINY, COLOR_CURRENT_TIME, BORDER_RADIUS,
 };
 
 /// Represents an event with its calculated column position for overlap handling
@@ -43,6 +46,12 @@ pub struct WeekViewEvents<'a> {
     pub events_by_date: &'a HashMap<NaiveDate, Vec<DisplayEvent>>,
     /// Currently selected event UID (for visual feedback)
     pub selected_event_uid: Option<&'a str>,
+    /// Selection state for time slot highlighting
+    pub selection: &'a SelectionState,
+    /// Active dialog state (for quick event input)
+    pub active_dialog: &'a ActiveDialog,
+    /// Selected calendar color (for quick event styling)
+    pub calendar_color: &'a str,
 }
 
 pub fn render_week_view<'a>(
@@ -52,6 +61,13 @@ pub fn render_week_view<'a>(
 ) -> Element<'a, Message> {
     // Extract selected event UID for selection highlighting
     let selected_event_uid = events.as_ref().and_then(|e| e.selected_event_uid);
+
+    // Extract selection state for time slot highlighting
+    let selection = events.as_ref().map(|e| e.selection);
+
+    // Extract active dialog and calendar color for quick event input
+    let active_dialog = events.as_ref().map(|e| e.active_dialog);
+    let calendar_color = events.as_ref().map(|e| e.calendar_color);
 
     // Separate events into all-day and timed
     let (all_day_events, timed_events) = if let Some(ref ev) = events {
@@ -68,7 +84,7 @@ pub fn render_week_view<'a>(
     let header_section = render_header_section(week_state, locale, &all_day_events, all_day_section_height, selected_event_uid);
 
     // Time grid with timed events
-    let time_grid = render_time_grid_with_events(locale, week_state, &timed_events, selected_event_uid);
+    let time_grid = render_time_grid_with_events(locale, week_state, &timed_events, selected_event_uid, selection, active_dialog, calendar_color);
 
     let content = column()
         .spacing(0)
@@ -319,6 +335,9 @@ fn render_time_grid_with_events<'a>(
     week_state: &'a WeekState,
     timed_events: &HashMap<NaiveDate, Vec<DisplayEvent>>,
     selected_event_uid: Option<&'a str>,
+    selection: Option<&'a SelectionState>,
+    active_dialog: Option<&'a ActiveDialog>,
+    calendar_color: Option<&'a str>,
 ) -> Element<'a, Message> {
     // Get current time for the "now" indicator
     let now = chrono::Local::now();
@@ -328,6 +347,15 @@ fn render_time_grid_with_events<'a>(
 
     // Check if today is in the current week
     let today_column_index = week_state.days.iter().position(|d| *d == today);
+
+    // Check if there's an active timed quick event to display
+    let quick_event_data = active_dialog.and_then(|dialog| {
+        if let ActiveDialog::QuickEvent { start_date, start_time: Some(start_time), end_time: Some(end_time), text, .. } = dialog {
+            Some((*start_date, *start_time, *end_time, text.as_str()))
+        } else {
+            None
+        }
+    });
 
     // Build the grid as a row: time labels column + day columns
     let mut main_row = row().spacing(0);
@@ -342,6 +370,15 @@ fn render_time_grid_with_events<'a>(
         let is_today_column = today_column_index == Some(day_idx);
         let day_events = timed_events.get(date).cloned().unwrap_or_default();
 
+        // Check if this day has the quick event input
+        let day_quick_event = quick_event_data.and_then(|(qe_date, start, end, text)| {
+            if qe_date == *date {
+                Some((start, end, text, calendar_color.unwrap_or("#3B82F6")))
+            } else {
+                None
+            }
+        });
+
         let day_column = render_day_column_with_events(
             *date,
             &day_events,
@@ -350,6 +387,8 @@ fn render_time_grid_with_events<'a>(
             current_hour,
             current_minute,
             selected_event_uid,
+            selection,
+            day_quick_event,
         );
 
         main_row = main_row.push(day_column);
@@ -407,12 +446,19 @@ fn render_day_column_with_events(
     current_hour: u32,
     current_minute: u32,
     selected_event_uid: Option<&str>,
+    selection: Option<&SelectionState>,
+    quick_event: Option<(NaiveTime, NaiveTime, &str, &str)>, // (start_time, end_time, text, color)
 ) -> Element<'static, Message> {
     // Build the base hour grid (background layer) - now with click support
-    let hour_grid = render_hour_grid_background(date, is_weekend, is_today, current_hour, current_minute);
+    let hour_grid = render_hour_grid_background(date, is_weekend, is_today, current_hour, current_minute, selection);
 
-    // If no events, just return the grid
-    if events.is_empty() {
+    // Build quick event input layer if active
+    let quick_event_layer = quick_event.map(|(start_time, end_time, text, color)| {
+        render_quick_event_input_layer(start_time, end_time, text.to_string(), color.to_string())
+    });
+
+    // If no events and no quick event, just return the grid
+    if events.is_empty() && quick_event_layer.is_none() {
         return container(hour_grid)
             .width(Length::Fill)
             .into();
@@ -425,11 +471,19 @@ fn render_day_column_with_events(
     // Build the events overlay layer
     let events_layer = render_events_overlay_layer(date, &positioned_events, max_columns, selected_event_uid);
 
-    // Use stack to overlay events on top of the grid
-    let stacked: Element<'static, Message> = stack![
-        hour_grid,
-        events_layer
-    ].into();
+    // Use stack to overlay events on top of the grid, and quick event on top of that
+    let stacked: Element<'static, Message> = if let Some(qe_layer) = quick_event_layer {
+        stack![
+            hour_grid,
+            events_layer,
+            qe_layer
+        ].into()
+    } else {
+        stack![
+            hour_grid,
+            events_layer
+        ].into()
+    };
 
     container(stacked)
         .width(Length::Fill)
@@ -443,17 +497,20 @@ fn render_hour_grid_background(
     is_today: bool,
     current_hour: u32,
     current_minute: u32,
+    selection: Option<&SelectionState>,
 ) -> Element<'static, Message> {
     let mut hour_cells = column().spacing(0);
 
     for hour in 0..24u32 {
         let show_time_indicator = is_today && hour == current_hour;
+        // Check if this hour cell is within the current selection
+        let is_selected = selection.map(|s| s.is_active && s.contains_time(date, hour)).unwrap_or(false);
 
         let cell = if show_time_indicator {
             let minute_offset = (current_minute as f32 / 60.0) * HOUR_ROW_HEIGHT;
-            render_clickable_hour_cell_with_indicator(date, hour, is_weekend, minute_offset)
+            render_clickable_hour_cell_with_indicator(date, hour, is_weekend, minute_offset, is_selected)
         } else {
-            render_clickable_hour_cell(date, hour, is_weekend)
+            render_clickable_hour_cell(date, hour, is_weekend, is_selected)
         };
 
         hour_cells = hour_cells.push(cell);
@@ -618,47 +675,61 @@ fn event_time_range(event: &DisplayEvent) -> (u32, u32) {
 }
 
 /// Render a clickable hour cell (for creating new events and drag targets)
-fn render_clickable_hour_cell(date: NaiveDate, _hour: u32, is_weekend: bool) -> Element<'static, Message> {
-    let year = date.year();
-    let month = date.month();
-    let day = date.day();
+fn render_clickable_hour_cell(date: NaiveDate, hour: u32, is_weekend: bool, is_selected: bool) -> Element<'static, Message> {
+    // Create the time for this hour cell
+    let start_time = NaiveTime::from_hms_opt(hour, 0, 0).unwrap();
+    let _end_time = NaiveTime::from_hms_opt(hour, 59, 59).unwrap_or_else(|| {
+        NaiveTime::from_hms_opt(23, 59, 59).unwrap()
+    });
 
     let cell = container(widget::text(""))
         .width(Length::Fill)
         .height(Length::Fixed(HOUR_ROW_HEIGHT))
-        .style(move |_theme: &cosmic::Theme| container::Style {
-            background: if is_weekend {
+        .style(move |theme: &cosmic::Theme| {
+            let background = if is_selected {
+                // Use theme accent color for selection (consistent with month view)
+                let accent = theme.cosmic().accent_color();
+                Some(Background::Color(cosmic::iced::Color::from_rgba(
+                    accent.red, accent.green, accent.blue, 0.2
+                )))
+            } else if is_weekend {
                 Some(Background::Color(COLOR_WEEKEND_BACKGROUND))
             } else {
                 None
-            },
-            border: Border {
-                width: BORDER_WIDTH_THIN,
-                color: COLOR_DAY_CELL_BORDER,
+            };
+            container::Style {
+                background,
+                border: Border {
+                    width: BORDER_WIDTH_THIN,
+                    color: COLOR_DAY_CELL_BORDER,
+                    ..Default::default()
+                },
                 ..Default::default()
-            },
-            ..Default::default()
+            }
         });
 
-    // Single click selects the day, double-click opens new event dialog
-    // on_enter allows this cell to receive drag updates when hovering during drag
+    // Press: start time selection for creating timed events
+    // Release: end time selection
+    // on_enter: update time selection (for drag selection)
+    // Double-click: open new event dialog
     mouse_area(cell)
-        .on_press(Message::SelectDay(year, month, day))
+        .on_press(Message::TimeSelectionStart(date, start_time))
+        .on_release(Message::TimeSelectionEnd)
         .on_double_click(Message::OpenNewEventDialog)
-        .on_enter(Message::DragEventUpdate(date))
+        .on_enter(Message::TimeSelectionUpdate(date, start_time))
         .into()
 }
 
 /// Render a clickable hour cell with the current time indicator
 fn render_clickable_hour_cell_with_indicator(
     date: NaiveDate,
-    _hour: u32,
+    hour: u32,
     is_weekend: bool,
     minute_offset: f32,
+    is_selected: bool,
 ) -> Element<'static, Message> {
-    let year = date.year();
-    let month = date.month();
-    let day = date.day();
+    // Create the time for this hour cell
+    let start_time = NaiveTime::from_hms_opt(hour, 0, 0).unwrap();
 
     // Create padding at top to position the line
     let top_spacer = container(widget::text(""))
@@ -699,26 +770,38 @@ fn render_clickable_hour_cell_with_indicator(
     let cell = container(content)
         .width(Length::Fill)
         .height(Length::Fixed(HOUR_ROW_HEIGHT))
-        .style(move |_theme: &cosmic::Theme| container::Style {
-            background: if is_weekend {
+        .style(move |theme: &cosmic::Theme| {
+            let background = if is_selected {
+                // Use theme accent color for selection (consistent with month view)
+                let accent = theme.cosmic().accent_color();
+                Some(Background::Color(cosmic::iced::Color::from_rgba(
+                    accent.red, accent.green, accent.blue, 0.2
+                )))
+            } else if is_weekend {
                 Some(Background::Color(COLOR_WEEKEND_BACKGROUND))
             } else {
                 None
-            },
-            border: Border {
-                width: BORDER_WIDTH_THIN,
-                color: COLOR_DAY_CELL_BORDER,
+            };
+            container::Style {
+                background,
+                border: Border {
+                    width: BORDER_WIDTH_THIN,
+                    color: COLOR_DAY_CELL_BORDER,
+                    ..Default::default()
+                },
                 ..Default::default()
-            },
-            ..Default::default()
+            }
         });
 
-    // Single click selects the day, double-click opens new event dialog
-    // on_enter allows this cell to receive drag updates when hovering during drag
+    // Press: start time selection for creating timed events
+    // Release: end time selection
+    // on_enter: update time selection (for drag selection)
+    // Double-click: open new event dialog
     mouse_area(cell)
-        .on_press(Message::SelectDay(year, month, day))
+        .on_press(Message::TimeSelectionStart(date, start_time))
+        .on_release(Message::TimeSelectionEnd)
         .on_double_click(Message::OpenNewEventDialog)
-        .on_enter(Message::DragEventUpdate(date))
+        .on_enter(Message::TimeSelectionUpdate(date, start_time))
         .into()
 }
 
@@ -797,4 +880,71 @@ fn calculate_event_columns(events: &[DisplayEvent]) -> Vec<PositionedEvent> {
     }
 
     positioned
+}
+
+/// Render the quick event input overlay layer for timed event creation
+/// Positions the input at the correct time slot and spans the selected duration
+fn render_quick_event_input_layer(
+    start_time: NaiveTime,
+    end_time: NaiveTime,
+    text: String,
+    calendar_color: String,
+) -> Element<'static, Message> {
+    // Calculate position and height based on time range
+    let start_mins = start_time.hour() * 60 + start_time.minute();
+    let end_mins = end_time.hour() * 60 + end_time.minute();
+
+    // Ensure minimum duration and proper order
+    let (start_mins, end_mins) = if start_mins <= end_mins {
+        (start_mins, end_mins.max(start_mins + 30)) // Minimum 30 min
+    } else {
+        (end_mins, start_mins.max(end_mins + 30))
+    };
+
+    let top_offset = (start_mins as f32 / 60.0) * HOUR_ROW_HEIGHT;
+    let height = ((end_mins - start_mins) as f32 / 60.0) * HOUR_ROW_HEIGHT;
+    let height = height.max(HOUR_ROW_HEIGHT); // Minimum height of 1 hour cell
+
+    let color = parse_hex_color(&calendar_color)
+        .unwrap_or(cosmic::iced::Color::from_rgb(0.23, 0.51, 0.97));
+
+    // Create text input for the event title
+    let input = text_input("New event...", &text)
+        .id(quick_event_input_id())
+        .on_input(Message::QuickEventTextChanged)
+        .on_submit(Message::CommitQuickEvent)
+        .size(12)
+        .padding([4, 6])
+        .width(Length::Fill);
+
+    // Style the container with calendar color
+    let input_container = container(input)
+        .width(Length::Fill)
+        .height(Length::Fixed(height))
+        .padding([2, 4])
+        .style(move |_theme: &cosmic::Theme| container::Style {
+            background: Some(Background::Color(cosmic::iced::Color {
+                a: 0.3,
+                ..color
+            })),
+            border: Border {
+                color,
+                width: 2.0,
+                radius: BORDER_RADIUS.into(),
+            },
+            ..Default::default()
+        });
+
+    // Create spacer to position the input at the correct time
+    let top_spacer = container(widget::text(""))
+        .height(Length::Fixed(top_offset))
+        .width(Length::Fill);
+
+    // Build column with spacer and input
+    column()
+        .spacing(0)
+        .push(top_spacer)
+        .push(input_container)
+        .width(Length::Fill)
+        .into()
 }

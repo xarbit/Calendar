@@ -344,6 +344,9 @@ impl CosmicCalendar {
         let week_events = views::WeekViewEvents {
             events_by_date: &self.cached_week_events,
             selected_event_uid: self.selected_event_uid.as_deref(),
+            selection: &self.selection_state,
+            active_dialog: &self.active_dialog,
+            calendar_color: &self.selected_calendar_color,
         };
 
         views::render_main_content(
