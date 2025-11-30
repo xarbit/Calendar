@@ -6,9 +6,9 @@
 
 ![Month View](images/image1.png)
 
-![Day view](images/day.png)
-
 ![Week view](images/week.png)
+
+![Day view](images/day.png)
 
 ![Year view](images/year.png)
 
