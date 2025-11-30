@@ -18,15 +18,24 @@ use cosmic::app::Task;
 use log::{debug, info};
 
 use crate::app::CosmicCalendar;
+use crate::components::quick_event_input_id;
 use crate::dialogs::DialogManager;
 use crate::message::Message;
 use crate::services::SettingsHandler;
+use cosmic::iced_widget::text_input;
 
 /// Helper to dismiss empty quick events on focus-loss actions (navigation, day selection)
 /// This centralizes the pattern of clearing transient UI state when the user navigates away
 #[inline]
 fn dismiss_on_focus_loss(app: &mut CosmicCalendar) {
     DialogManager::dismiss_empty_quick_event(&mut app.active_dialog);
+}
+
+/// Focus the quick event input field
+/// Returns a Task that focuses the text input for immediate typing
+#[inline]
+fn focus_quick_event_input() -> Task<Message> {
+    text_input::focus(quick_event_input_id())
 }
 
 /// Close all legacy dialog fields (deprecated, will be removed after full migration)
@@ -245,6 +254,10 @@ pub fn handle_message(app: &mut CosmicCalendar, message: Message) -> Task<Messag
         }
         Message::SelectionEnd => {
             handle_selection_end(app);
+            // Focus the quick event input if a quick event was started
+            if app.active_dialog.is_quick_event() {
+                return focus_quick_event_input();
+            }
         }
         Message::SelectionCancel => {
             handle_selection_cancel(app);
@@ -253,6 +266,7 @@ pub fn handle_message(app: &mut CosmicCalendar, message: Message) -> Task<Messag
         // === Event Management - Quick Events ===
         Message::StartQuickEvent(date) => {
             handle_start_quick_event(app, date);
+            return focus_quick_event_input();
         }
         Message::QuickEventTextChanged(text) => {
             handle_quick_event_text_changed(app, text);

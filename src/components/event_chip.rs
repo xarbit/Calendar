@@ -9,6 +9,11 @@ use crate::components::color_picker::parse_hex_color;
 use crate::message::Message;
 use crate::ui_constants::{SPACING_TINY, SPACING_XXS, BORDER_RADIUS, COLOR_DEFAULT_GRAY};
 
+/// ID for the quick event text input - used for auto-focus
+pub fn quick_event_input_id() -> text_input::Id {
+    text_input::Id::new("quick_event_input")
+}
+
 /// Size of the colored dot for timed events
 const TIMED_EVENT_DOT_SIZE: f32 = 8.0;
 
@@ -154,6 +159,7 @@ pub fn render_spanning_quick_event_input(
     let color = parse_hex_color(&calendar_color).unwrap_or(COLOR_DEFAULT_GRAY);
 
     let input = text_input("New event...", &text)
+        .id(quick_event_input_id())
         .on_input(Message::QuickEventTextChanged)
         .on_submit(Message::CommitQuickEvent)
         .size(14)
