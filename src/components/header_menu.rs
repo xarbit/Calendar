@@ -7,7 +7,7 @@ use std::sync::LazyLock;
 use crate::fl;
 use crate::menu_action::MenuAction;
 use crate::message::Message;
-use crate::ui_constants::{ICON_ADD, ICON_SEARCH, ICON_SIDEBAR_OPEN, ICON_SIDEBAR_CLOSED, ICON_TODAY, MENU_ITEM_HEIGHT, MENU_ITEM_WIDTH, MENU_SPACING};
+use crate::ui_constants::{ICON_ADD, ICON_SEARCH, ICON_TODAY, MENU_ITEM_HEIGHT, MENU_ITEM_WIDTH, MENU_SPACING};
 
 /// Static menu ID for responsive menu bar - must persist across renders for collapse state tracking
 static MENU_ID: LazyLock<widget::Id> = LazyLock::new(|| widget::Id::new("sol-calendar-menu"));
@@ -19,15 +19,11 @@ pub fn render_header_start<'a>(
     sidebar_visible: bool,
     show_week_numbers: bool,
 ) -> Vec<Element<'a, Message>> {
-    let sidebar_icon = if sidebar_visible {
-        ICON_SIDEBAR_OPEN
-    } else {
-        ICON_SIDEBAR_CLOSED
-    };
-
     vec![
-        button::icon(widget::icon::from_name(sidebar_icon))
-            .on_press(Message::ToggleSidebar)
+        // Use the official COSMIC nav_bar_toggle for consistent styling
+        widget::nav_bar_toggle()
+            .active(sidebar_visible)
+            .on_toggle(Message::ToggleSidebar)
             .into(),
         widget::responsive_menu_bar()
             .item_height(menu::ItemHeight::Dynamic(MENU_ITEM_HEIGHT))

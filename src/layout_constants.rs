@@ -60,8 +60,6 @@ pub const SHADOW_BLUR_RADIUS: f32 = 10.0;
 // Icon names
 pub const ICON_PREVIOUS: &str = "go-previous-symbolic";
 pub const ICON_NEXT: &str = "go-next-symbolic";
-pub const ICON_SIDEBAR_OPEN: &str = "navbar-open-symbolic";
-pub const ICON_SIDEBAR_CLOSED: &str = "navbar-closed-symbolic";
 pub const ICON_SEARCH: &str = "system-search-symbolic";
 pub const ICON_TODAY: &str = "x-office-calendar-symbolic";
 pub const ICON_ADD: &str = "list-add-symbolic";
