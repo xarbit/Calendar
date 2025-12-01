@@ -73,6 +73,8 @@ pub struct CalendarEvent {
     pub travel_time: TravelTime,
     /// Repeat/recurrence settings
     pub repeat: RepeatFrequency,
+    /// End date for recurring events (None means no end date)
+    pub repeat_until: Option<chrono::NaiveDate>,
     /// Invitees (email addresses)
     pub invitees: Vec<String>,
     /// Alert/reminder settings
@@ -242,6 +244,7 @@ mod tests {
             end: chrono::Utc::now() + chrono::Duration::hours(1),
             travel_time: TravelTime::None,
             repeat: RepeatFrequency::Never,
+            repeat_until: None,
             invitees: vec![],
             alert: AlertTime::FifteenMinutes,
             alert_second: None,

@@ -237,6 +237,7 @@ mod tests {
             end: Utc.with_ymd_and_hms(2025, 12, 1, 11, 0, 0).unwrap(),
             travel_time: TravelTime::None,
             repeat: RepeatFrequency::Never,
+            repeat_until: None,
             invitees: vec![],
             alert: AlertTime::None,
             alert_second: None,

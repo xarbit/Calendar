@@ -123,3 +123,179 @@ fl!("app-title")  // Returns localized string
 - **Event operations go through EventHandler**, not directly to calendars
 - **Protocols are storage-agnostic** - they only know how to read/write events
 - **EventHandler is the single point** for event CRUD operations
+
+## Data Flow
+
+### Event Creation Flow (UI → Database → UI)
+
+```
+1. User Action (click date, drag selection, or event dialog)
+   ↓
+2. Message Generated (SelectionEnd, CommitQuickEvent, ConfirmEventDialog)
+   ↓
+3. Update Handler (update/event.rs)
+   - Creates CalendarEvent struct with uid, summary, dates, times
+   ↓
+4. EventHandler::add_event() (services/event_handler.rs)
+   - Validates event (title, time range)
+   - Finds target calendar
+   - Routes through CalendarSource trait
+   ↓
+5. LocalCalendar::add_event() (calendars/local_calendar.rs)
+   - Calls Database::insert_event()
+   - Updates cached_events vec
+   ↓
+6. Database::insert_event() (database/schema.rs)
+   - Serializes complex types (RepeatFrequency, AlertTime)
+   - Stores in SQLite events table
+   ↓
+7. app.refresh_cached_events()
+   - Rebuilds cached_month_events/cached_week_events HashMaps
+   ↓
+8. Views re-render with new DisplayEvent objects
+```
+
+### State Synchronization
+
+When `selected_date` changes, all views sync:
+```rust
+pub fn sync_views_to_selected_date(&mut self) {
+    self.cache.set_current(date.year(), date.month());
+    self.week_state = WeekState::new(date, ...);
+    self.day_state = DayState::new(date, ...);
+    self.year_state = YearState::new(date.year());
+    self.mini_calendar_state = CalendarState::new(date.year(), date.month());
+    self.refresh_cached_events();
+}
+```
+
+## Event Model (caldav.rs)
+
+```rust
+pub struct CalendarEvent {
+    pub uid: String,                    // UUID4
+    pub summary: String,                // Title (required)
+    pub location: Option<String>,
+    pub all_day: bool,
+    pub start: DateTime<Utc>,
+    pub end: DateTime<Utc>,
+    pub travel_time: TravelTime,
+    pub repeat: RepeatFrequency,        // Never, Daily, Weekly, Monthly, Yearly, Custom(RRULE)
+    pub invitees: Vec<String>,
+    pub alert: AlertTime,
+    pub alert_second: Option<AlertTime>,
+    pub attachments: Vec<String>,
+    pub url: Option<String>,
+    pub notes: Option<String>,
+}
+```
+
+**RepeatFrequency**: `Never | Daily | Weekly | Biweekly | Monthly | Yearly | Custom(String)`
+
+**AlertTime**: `None | AtTime | FiveMinutes | TenMinutes | FifteenMinutes | ThirtyMinutes | OneHour | TwoHours | OneDay | TwoDays | OneWeek | Custom(i32)`
+
+**DisplayEvent** (rendered version with calendar color):
+```rust
+pub struct DisplayEvent {
+    pub uid: String,
+    pub summary: String,
+    pub color: String,                 // Hex from calendar
+    pub all_day: bool,
+    pub start_time: Option<NaiveTime>,
+    pub end_time: Option<NaiveTime>,
+    pub span_start: Option<NaiveDate>, // Multi-day start
+    pub span_end: Option<NaiveDate>,
+}
+```
+
+## Database Schema (SQLite)
+
+**Location**: `~/.local/share/sol-calendar/sol.db`
+
+```sql
+CREATE TABLE events (
+    uid TEXT PRIMARY KEY,
+    calendar_id TEXT NOT NULL,
+    summary TEXT NOT NULL,
+    location TEXT,
+    all_day INTEGER NOT NULL DEFAULT 0,
+    start_time TEXT NOT NULL,           -- RFC3339 UTC
+    end_time TEXT NOT NULL,
+    travel_time TEXT NOT NULL DEFAULT 'None',    -- JSON
+    repeat TEXT NOT NULL DEFAULT 'Never',        -- JSON
+    invitees TEXT NOT NULL DEFAULT '[]',         -- JSON array
+    alert TEXT NOT NULL DEFAULT 'None',          -- JSON
+    alert_second TEXT,
+    attachments TEXT NOT NULL DEFAULT '[]',
+    url TEXT,
+    notes TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+```
+
+**Note**: Calendar metadata (name, color, enabled) stored in JSON config, not database.
+
+## Key Abstractions
+
+### CalendarSource Trait (calendars/calendar_source.rs)
+```rust
+pub trait CalendarSource: Debug + Send {
+    fn info(&self) -> &CalendarInfo;
+    fn is_enabled(&self) -> bool;
+    fn fetch_events(&self) -> Result<Vec<CalendarEvent>>;
+    fn add_event(&mut self, event: CalendarEvent) -> Result<()>;
+    fn update_event(&mut self, event: CalendarEvent) -> Result<()>;
+    fn delete_event(&mut self, uid: &str) -> Result<()>;
+    fn sync(&mut self) -> Result<()>;
+}
+```
+
+### CalendarManager (calendars/mod.rs)
+- Manages multiple CalendarSource implementations
+- Routes operations to correct calendar
+- Provides `get_display_events_for_month()` / `get_display_events_for_week()`
+
+### ActiveDialog Enum (dialogs/mod.rs)
+Only one dialog open at a time:
+```rust
+pub enum ActiveDialog {
+    None,
+    QuickEvent { date, text, start_time, end_time },
+    EventCreate,
+    EventEdit { uid },
+    CalendarCreate { name, color },
+    CalendarEdit { id, name, color },
+    EventDelete { uid, is_recurring, ... },
+    ConfirmDeleteCalendar { id },
+    ColorPicker { calendar_id },
+}
+```
+
+## File Quick Reference
+
+| Task | Files to Modify |
+|------|-----------------|
+| New event property | `caldav.rs`, `database/schema.rs`, `update/event.rs`, components |
+| New message type | `message.rs`, `update/mod.rs`, handler function |
+| New keyboard shortcut | `keyboard.rs`, `menu_action.rs`, `message.rs`, `update/mod.rs` |
+| New calendar type | Implement `CalendarSource` trait in `calendars/` |
+| Improve repeating events | `caldav.rs` (RepeatFrequency), expansion logic in views |
+| Add new view | `views/` module, `models/` state, `CalendarView` enum |
+
+## Development Flags (Debug Only)
+
+```bash
+cargo run -- --dev-reset-db      # Clear all events
+cargo run -- --dev-seed-data     # Generate demo events for a year
+```
+
+## Keyboard Shortcuts
+
+Defined in `keyboard.rs`:
+- `Ctrl+Shift+N` - New event
+- `Ctrl+Shift+T` - Today
+- `Ctrl+Shift+D/W/M/Y` - Day/Week/Month/Year view
+- `Ctrl+Shift+Arrow` - Navigate period
+- `Ctrl+Shift+[/]` - Cycle views
+- `Delete` - Delete selected event

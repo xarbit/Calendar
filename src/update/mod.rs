@@ -126,11 +126,12 @@ use calendar::{
     handle_open_calendar_dialog_edit, handle_request_delete_calendar, handle_toggle_calendar,
 };
 use event::{
-    handle_cancel_event_dialog, handle_cancel_quick_event, handle_commit_quick_event,
-    handle_confirm_event_dialog, handle_delete_event, handle_drag_event_cancel,
-    handle_drag_event_end, handle_drag_event_start, handle_drag_event_update,
-    handle_open_edit_event_dialog, handle_open_new_event_dialog, handle_quick_event_text_changed,
-    handle_select_event, handle_start_quick_event, handle_start_quick_timed_event,
+    extract_master_uid, handle_cancel_event_dialog, handle_cancel_quick_event,
+    handle_commit_quick_event, handle_confirm_event_dialog, handle_delete_event,
+    handle_drag_event_cancel, handle_drag_event_end, handle_drag_event_start,
+    handle_drag_event_update, handle_open_edit_event_dialog, handle_open_new_event_dialog,
+    handle_quick_event_text_changed, handle_select_event, handle_start_quick_event,
+    handle_start_quick_timed_event,
 };
 use navigation::{handle_next_period, handle_previous_period};
 use selection::{
@@ -454,8 +455,10 @@ pub fn handle_message(app: &mut CosmicCalendar, message: Message) -> Task<Messag
         Message::RequestDeleteSelectedEvent => {
             // Request delete of selected event - opens confirmation dialog
             if let Some(uid) = app.selected_event_uid.clone() {
+                // Extract master UID for recurring events (occurrence UIDs have format master-uid_YYYYMMDD)
+                let master_uid = extract_master_uid(&uid);
                 // Find the event to get its name and check if it's recurring
-                if let Ok((event, _calendar_id)) = crate::services::EventHandler::find_event(&app.calendar_manager, &uid) {
+                if let Ok((event, _calendar_id)) = crate::services::EventHandler::find_event(&app.calendar_manager, master_uid) {
                     let is_recurring = !matches!(event.repeat, crate::caldav::RepeatFrequency::Never);
                     DialogManager::open(
                         &mut app.active_dialog,
@@ -467,7 +470,7 @@ pub fn handle_message(app: &mut CosmicCalendar, message: Message) -> Task<Messag
                         },
                     );
                 } else {
-                    debug!("RequestDeleteSelectedEvent: Event not found: {}", uid);
+                    debug!("RequestDeleteSelectedEvent: Event not found: {} (master_uid={})", uid, master_uid);
                 }
             } else {
                 debug!("RequestDeleteSelectedEvent: No event selected");

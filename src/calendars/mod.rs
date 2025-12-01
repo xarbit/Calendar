@@ -7,10 +7,10 @@ pub use calendar_source::{CalendarSource, CalendarType};
 pub use config::{CalendarConfig, CalendarManagerConfig};
 pub use local_calendar::LocalCalendar;
 
-use crate::caldav::CalendarEvent;
+use crate::caldav::{CalendarEvent, RepeatFrequency};
 use crate::components::DisplayEvent;
 use crate::database::Database;
-use chrono::{Datelike, Timelike};
+use chrono::{Datelike, Timelike, NaiveDate, Duration, Months};
 use log::{debug, info};
 use std::collections::HashMap;
 use std::error::Error;
@@ -185,6 +185,86 @@ impl CalendarManager {
             .collect()
     }
 
+    /// Expand a recurring event into multiple occurrences within a date range
+    /// Returns a vector of (occurrence_date, event) tuples
+    fn expand_recurring_event(
+        event: &CalendarEvent,
+        range_start: NaiveDate,
+        range_end: NaiveDate,
+    ) -> Vec<(NaiveDate, CalendarEvent)> {
+        // Non-recurring events return a single occurrence
+        if matches!(event.repeat, RepeatFrequency::Never) {
+            let event_date = event.start.date_naive();
+            if event_date >= range_start && event_date <= range_end {
+                return vec![(event_date, event.clone())];
+            } else {
+                return vec![];
+            }
+        }
+
+        let mut occurrences = Vec::new();
+        let event_start_date = event.start.date_naive();
+
+        // Determine the end date for recurrence
+        let recurrence_end = event.repeat_until.unwrap_or(range_end);
+
+        // Start from the event's start date or range_start, whichever is later
+        let mut current_date = if event_start_date < range_start {
+            // Fast-forward to first occurrence within range
+            // This is a simplification - ideal would be to calculate exact first occurrence
+            event_start_date
+        } else {
+            event_start_date
+        };
+
+        // Limit iterations to prevent infinite loops (max 1000 occurrences per query)
+        let max_iterations = 1000;
+        let mut iteration_count = 0;
+
+        while current_date <= recurrence_end && current_date <= range_end && iteration_count < max_iterations {
+            iteration_count += 1;
+
+            // Only add if within the visible range
+            if current_date >= range_start {
+                // Create a clone of the event with adjusted dates
+                let duration = event.end - event.start;
+                let mut occurrence = event.clone();
+                occurrence.start = current_date.and_time(event.start.time()).and_utc();
+                occurrence.end = occurrence.start + duration;
+
+                // Generate unique UID for each occurrence by appending the date
+                // This ensures deduplication logic in views doesn't skip occurrences
+                occurrence.uid = format!("{}_{}", event.uid, current_date.format("%Y%m%d"));
+
+                occurrences.push((current_date, occurrence));
+            }
+
+            // Advance to next occurrence based on repeat frequency
+            current_date = match event.repeat {
+                RepeatFrequency::Daily => current_date + Duration::days(1),
+                RepeatFrequency::Weekly => current_date + Duration::weeks(1),
+                RepeatFrequency::Biweekly => current_date + Duration::weeks(2),
+                RepeatFrequency::Monthly => {
+                    // Add one month, handling month boundaries
+                    current_date.checked_add_months(Months::new(1))
+                        .unwrap_or(current_date + Duration::days(30))
+                },
+                RepeatFrequency::Yearly => {
+                    // Add one year
+                    current_date.checked_add_months(Months::new(12))
+                        .unwrap_or(current_date + Duration::days(365))
+                },
+                RepeatFrequency::Custom(_) => {
+                    // TODO: Parse RRULE for custom recurrence
+                    break;
+                },
+                RepeatFrequency::Never => break,
+            };
+        }
+
+        occurrences
+    }
+
     /// Get events for a specific month grouped by date, with calendar colors.
     /// Includes events from adjacent months that would be visible in the month view.
     /// Returns a HashMap where key is NaiveDate and value is Vec of DisplayEvents.
@@ -216,68 +296,73 @@ impl CalendarManager {
 
             if let Ok(events) = source.fetch_events() {
                 for event in events {
-                    let event_start = event.start.date_naive();
-                    let event_end = event.end.date_naive();
+                    // Expand recurring events into individual occurrences
+                    let occurrences = Self::expand_recurring_event(&event, range_start, range_end);
 
-                    // For all-day events, add to each day in the range
-                    // For multi-day events (end > start), show on each day
-                    if event.all_day && event_end > event_start {
-                        // Multi-day event: iterate through each day
-                        let mut current = event_start;
-                        while current <= event_end && current <= range_end {
-                            if current >= range_start {
+                    for (_occurrence_date, occurrence_event) in occurrences {
+                        let event_start = occurrence_event.start.date_naive();
+                        let event_end = occurrence_event.end.date_naive();
+
+                        // For all-day events, add to each day in the range
+                        // For multi-day events (end > start), show on each day
+                        if occurrence_event.all_day && event_end > event_start {
+                            // Multi-day event: iterate through each day
+                            let mut current = event_start;
+                            while current <= event_end && current <= range_end {
+                                if current >= range_start {
+                                    let display_event = DisplayEvent {
+                                        uid: occurrence_event.uid.clone(),
+                                        summary: occurrence_event.summary.clone(),
+                                        color: calendar_color.clone(),
+                                        all_day: true,
+                                        start_time: None,
+                                        end_time: None,
+                                        span_start: Some(event_start),
+                                        span_end: Some(event_end),
+                                    };
+                                    events_by_date
+                                        .entry(current)
+                                        .or_default()
+                                        .push(display_event);
+                                }
+                                current = current.succ_opt().unwrap_or(current);
+                            }
+                        } else {
+                            // Single-day event: only add to start date
+                            if event_start >= range_start && event_start <= range_end {
+                                // Extract start and end time for timed events
+                                let (start_time, end_time) = if occurrence_event.all_day {
+                                    (None, None)
+                                } else {
+                                    (
+                                        Some(chrono::NaiveTime::from_hms_opt(
+                                            occurrence_event.start.hour(),
+                                            occurrence_event.start.minute(),
+                                            0,
+                                        ).unwrap_or_default()),
+                                        Some(chrono::NaiveTime::from_hms_opt(
+                                            occurrence_event.end.hour(),
+                                            occurrence_event.end.minute(),
+                                            0,
+                                        ).unwrap_or_default()),
+                                    )
+                                };
+
                                 let display_event = DisplayEvent {
-                                    uid: event.uid.clone(),
-                                    summary: event.summary.clone(),
+                                    uid: occurrence_event.uid.clone(),
+                                    summary: occurrence_event.summary.clone(),
                                     color: calendar_color.clone(),
-                                    all_day: true,
-                                    start_time: None,
-                                    end_time: None,
-                                    span_start: Some(event_start),
-                                    span_end: Some(event_end),
+                                    all_day: occurrence_event.all_day,
+                                    start_time,
+                                    end_time,
+                                    span_start: None,
+                                    span_end: None,
                                 };
                                 events_by_date
-                                    .entry(current)
+                                    .entry(event_start)
                                     .or_default()
                                     .push(display_event);
                             }
-                            current = current.succ_opt().unwrap_or(current);
-                        }
-                    } else {
-                        // Single-day event: only add to start date
-                        if event_start >= range_start && event_start <= range_end {
-                            // Extract start and end time for timed events
-                            let (start_time, end_time) = if event.all_day {
-                                (None, None)
-                            } else {
-                                (
-                                    Some(chrono::NaiveTime::from_hms_opt(
-                                        event.start.hour(),
-                                        event.start.minute(),
-                                        0,
-                                    ).unwrap_or_default()),
-                                    Some(chrono::NaiveTime::from_hms_opt(
-                                        event.end.hour(),
-                                        event.end.minute(),
-                                        0,
-                                    ).unwrap_or_default()),
-                                )
-                            };
-
-                            let display_event = DisplayEvent {
-                                uid: event.uid.clone(),
-                                summary: event.summary.clone(),
-                                color: calendar_color.clone(),
-                                all_day: event.all_day,
-                                start_time,
-                                end_time,
-                                span_start: None,
-                                span_end: None,
-                            };
-                            events_by_date
-                                .entry(event_start)
-                                .or_default()
-                                .push(display_event);
                         }
                     }
                 }
@@ -310,67 +395,72 @@ impl CalendarManager {
 
             if let Ok(events) = source.fetch_events() {
                 for event in events {
-                    let event_start = event.start.date_naive();
-                    let event_end = event.end.date_naive();
+                    // Expand recurring events into individual occurrences
+                    let occurrences = Self::expand_recurring_event(&event, range_start, range_end);
 
-                    // For all-day/multi-day events, add to each day in the range
-                    if event.all_day && event_end > event_start {
-                        // Multi-day event: iterate through each day
-                        let mut current = event_start;
-                        while current <= event_end && current <= range_end {
-                            if current >= range_start {
+                    for (_occurrence_date, occurrence_event) in occurrences {
+                        let event_start = occurrence_event.start.date_naive();
+                        let event_end = occurrence_event.end.date_naive();
+
+                        // For all-day/multi-day events, add to each day in the range
+                        if occurrence_event.all_day && event_end > event_start {
+                            // Multi-day event: iterate through each day
+                            let mut current = event_start;
+                            while current <= event_end && current <= range_end {
+                                if current >= range_start {
+                                    let display_event = DisplayEvent {
+                                        uid: occurrence_event.uid.clone(),
+                                        summary: occurrence_event.summary.clone(),
+                                        color: calendar_color.clone(),
+                                        all_day: true,
+                                        start_time: None,
+                                        end_time: None,
+                                        span_start: Some(event_start),
+                                        span_end: Some(event_end),
+                                    };
+                                    events_by_date
+                                        .entry(current)
+                                        .or_default()
+                                        .push(display_event);
+                                }
+                                current = current.succ_opt().unwrap_or(current);
+                            }
+                        } else {
+                            // Single-day event: only add to start date
+                            if event_start >= range_start && event_start <= range_end {
+                                // Extract start and end time for timed events
+                                let (start_time, end_time) = if occurrence_event.all_day {
+                                    (None, None)
+                                } else {
+                                    (
+                                        Some(chrono::NaiveTime::from_hms_opt(
+                                            occurrence_event.start.hour(),
+                                            occurrence_event.start.minute(),
+                                            0,
+                                        ).unwrap_or_default()),
+                                        Some(chrono::NaiveTime::from_hms_opt(
+                                            occurrence_event.end.hour(),
+                                            occurrence_event.end.minute(),
+                                            0,
+                                        ).unwrap_or_default()),
+                                    )
+                                };
+
                                 let display_event = DisplayEvent {
-                                    uid: event.uid.clone(),
-                                    summary: event.summary.clone(),
+                                    uid: occurrence_event.uid.clone(),
+                                    summary: occurrence_event.summary.clone(),
                                     color: calendar_color.clone(),
-                                    all_day: true,
-                                    start_time: None,
-                                    end_time: None,
-                                    span_start: Some(event_start),
-                                    span_end: Some(event_end),
+                                    all_day: occurrence_event.all_day,
+                                    start_time,
+                                    end_time,
+                                    span_start: None,
+                                    span_end: None,
                                 };
                                 events_by_date
-                                    .entry(current)
+                                    .entry(event_start)
                                     .or_default()
                                     .push(display_event);
                             }
-                            current = current.succ_opt().unwrap_or(current);
-                        }
-                    } else {
-                        // Single-day event: only add to start date
-                        if event_start >= range_start && event_start <= range_end {
-                            // Extract start and end time for timed events
-                            let (start_time, end_time) = if event.all_day {
-                                (None, None)
-                            } else {
-                                (
-                                    Some(chrono::NaiveTime::from_hms_opt(
-                                        event.start.hour(),
-                                        event.start.minute(),
-                                        0,
-                                    ).unwrap_or_default()),
-                                    Some(chrono::NaiveTime::from_hms_opt(
-                                        event.end.hour(),
-                                        event.end.minute(),
-                                        0,
-                                    ).unwrap_or_default()),
-                                )
-                            };
-
-                            let display_event = DisplayEvent {
-                                uid: event.uid.clone(),
-                                summary: event.summary.clone(),
-                                color: calendar_color.clone(),
-                                all_day: event.all_day,
-                                start_time,
-                                end_time,
-                                span_start: None,
-                                span_end: None,
-                            };
-                            events_by_date
-                                .entry(event_start)
-                                .or_default()
-                                .push(display_event);
                         }
                     }
                 }

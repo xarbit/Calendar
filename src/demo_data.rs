@@ -51,55 +51,95 @@ pub fn populate_demo_data(db: &Database) -> Result<usize, Box<dyn Error>> {
     Ok(event_count)
 }
 
-/// Generate weekly recurring meetings
+/// Generate weekly recurring meetings using recurring events
 fn generate_recurring_meetings(db: &Database, start: NaiveDate, end: NaiveDate) -> Result<usize, Box<dyn Error>> {
     let mut count = 0;
-    let mut current = start;
 
-    while current <= end {
-        // Monday: Team standup at 9:00 AM
-        if current.weekday() == Weekday::Mon {
-            insert_event(db, "work", EventTemplate {
-                summary: "Team Standup",
-                location: Some("Conference Room A"),
-                duration_hours: 1,
-                all_day: false,
-                travel_time: TravelTime::None,
-                alert: AlertTime::FifteenMinutes,
-                notes: Some("Daily sync with the team. Discuss blockers and progress."),
-            }, current, NaiveTime::from_hms_opt(9, 0, 0).unwrap())?;
-            count += 1;
-        }
+    // Find first Monday in range
+    let mut first_monday = start;
+    while first_monday.weekday() != Weekday::Mon && first_monday <= end {
+        first_monday = first_monday.succ_opt().unwrap_or(first_monday);
+    }
 
-        // Wednesday: 1:1 with manager at 2:00 PM
-        if current.weekday() == Weekday::Wed {
-            insert_event(db, "work", EventTemplate {
-                summary: "1:1 with Manager",
-                location: Some("Manager's Office"),
-                duration_hours: 1,
-                all_day: false,
-                travel_time: TravelTime::None,
-                alert: AlertTime::ThirtyMinutes,
-                notes: Some("Weekly check-in. Bring status updates and questions."),
-            }, current, NaiveTime::from_hms_opt(14, 0, 0).unwrap())?;
-            count += 1;
-        }
+    if first_monday <= end {
+        // Weekly Monday standup
+        let event = CalendarEvent {
+            uid: Uuid::new_v4().to_string(),
+            summary: "Team Standup".to_string(),
+            location: Some("Conference Room A".to_string()),
+            all_day: false,
+            start: Utc.from_utc_datetime(&first_monday.and_hms_opt(9, 0, 0).unwrap()),
+            end: Utc.from_utc_datetime(&first_monday.and_hms_opt(10, 0, 0).unwrap()),
+            travel_time: TravelTime::None,
+            repeat: RepeatFrequency::Weekly,
+            repeat_until: Some(end),
+            invitees: vec![],
+            alert: AlertTime::FifteenMinutes,
+            alert_second: None,
+            attachments: vec![],
+            url: None,
+            notes: Some("Daily sync with the team. Discuss blockers and progress.".to_string()),
+        };
+        db.insert_event("work", &event)?;
+        count += 1;
+    }
 
-        // Friday: Sprint review at 3:00 PM (every other week)
-        if current.weekday() == Weekday::Fri && current.iso_week().week() % 2 == 0 {
-            insert_event(db, "work", EventTemplate {
-                summary: "Sprint Review",
-                location: Some("Main Conference Room"),
-                duration_hours: 2,
-                all_day: false,
-                travel_time: TravelTime::None,
-                alert: AlertTime::OneHour,
-                notes: Some("Demo completed work to stakeholders."),
-            }, current, NaiveTime::from_hms_opt(15, 0, 0).unwrap())?;
-            count += 1;
-        }
+    // Find first Wednesday in range
+    let mut first_wednesday = start;
+    while first_wednesday.weekday() != Weekday::Wed && first_wednesday <= end {
+        first_wednesday = first_wednesday.succ_opt().unwrap_or(first_wednesday);
+    }
 
-        current = current.succ_opt().unwrap();
+    if first_wednesday <= end {
+        // Weekly Wednesday 1:1
+        let event = CalendarEvent {
+            uid: Uuid::new_v4().to_string(),
+            summary: "1:1 with Manager".to_string(),
+            location: Some("Manager's Office".to_string()),
+            all_day: false,
+            start: Utc.from_utc_datetime(&first_wednesday.and_hms_opt(14, 0, 0).unwrap()),
+            end: Utc.from_utc_datetime(&first_wednesday.and_hms_opt(15, 0, 0).unwrap()),
+            travel_time: TravelTime::None,
+            repeat: RepeatFrequency::Weekly,
+            repeat_until: Some(end),
+            invitees: vec![],
+            alert: AlertTime::ThirtyMinutes,
+            alert_second: None,
+            attachments: vec![],
+            url: None,
+            notes: Some("Weekly check-in. Bring status updates and questions.".to_string()),
+        };
+        db.insert_event("work", &event)?;
+        count += 1;
+    }
+
+    // Find first Friday in range
+    let mut first_friday = start;
+    while first_friday.weekday() != Weekday::Fri && first_friday <= end {
+        first_friday = first_friday.succ_opt().unwrap_or(first_friday);
+    }
+
+    if first_friday <= end {
+        // Biweekly Friday sprint review
+        let event = CalendarEvent {
+            uid: Uuid::new_v4().to_string(),
+            summary: "Sprint Review".to_string(),
+            location: Some("Main Conference Room".to_string()),
+            all_day: false,
+            start: Utc.from_utc_datetime(&first_friday.and_hms_opt(15, 0, 0).unwrap()),
+            end: Utc.from_utc_datetime(&first_friday.and_hms_opt(17, 0, 0).unwrap()),
+            travel_time: TravelTime::None,
+            repeat: RepeatFrequency::Biweekly,
+            repeat_until: Some(end),
+            invitees: vec![],
+            alert: AlertTime::OneHour,
+            alert_second: None,
+            attachments: vec![],
+            url: None,
+            notes: Some("Demo completed work to stakeholders.".to_string()),
+        };
+        db.insert_event("work", &event)?;
+        count += 1;
     }
 
     Ok(count)
@@ -294,41 +334,95 @@ fn generate_social_events(db: &Database, start: NaiveDate, end: NaiveDate) -> Re
     Ok(count)
 }
 
-/// Generate health and fitness events
+/// Generate health and fitness events using recurring events
 fn generate_health_fitness(db: &Database, start: NaiveDate, end: NaiveDate) -> Result<usize, Box<dyn Error>> {
     let mut count = 0;
-    let mut current = start;
 
-    while current <= end {
-        // Tuesday & Thursday: Gym at 6:30 AM
-        if current.weekday() == Weekday::Tue || current.weekday() == Weekday::Thu {
-            insert_event(db, "personal", EventTemplate {
-                summary: "Gym Workout",
-                location: Some("Fitness Center"),
-                duration_hours: 1,
-                all_day: false,
-                travel_time: TravelTime::FifteenMinutes,
-                alert: AlertTime::ThirtyMinutes,
-                notes: Some("Strength training day"),
-            }, current, NaiveTime::from_hms_opt(6, 30, 0).unwrap())?;
-            count += 1;
-        }
+    // Find first Tuesday in range
+    let mut first_tuesday = start;
+    while first_tuesday.weekday() != Weekday::Tue && first_tuesday <= end {
+        first_tuesday = first_tuesday.succ_opt().unwrap_or(first_tuesday);
+    }
 
-        // Saturday: Morning run
-        if current.weekday() == Weekday::Sat {
-            insert_event(db, "personal", EventTemplate {
-                summary: "Morning Run",
-                location: Some("Park Trail"),
-                duration_hours: 1,
-                all_day: false,
-                travel_time: TravelTime::None,
-                alert: AlertTime::FifteenMinutes,
-                notes: Some("5K run"),
-            }, current, NaiveTime::from_hms_opt(7, 0, 0).unwrap())?;
-            count += 1;
-        }
+    if first_tuesday <= end {
+        // Weekly Tuesday gym
+        let event = CalendarEvent {
+            uid: Uuid::new_v4().to_string(),
+            summary: "Gym Workout".to_string(),
+            location: Some("Fitness Center".to_string()),
+            all_day: false,
+            start: Utc.from_utc_datetime(&first_tuesday.and_hms_opt(6, 30, 0).unwrap()),
+            end: Utc.from_utc_datetime(&first_tuesday.and_hms_opt(7, 30, 0).unwrap()),
+            travel_time: TravelTime::FifteenMinutes,
+            repeat: RepeatFrequency::Weekly,
+            repeat_until: Some(end),
+            invitees: vec![],
+            alert: AlertTime::ThirtyMinutes,
+            alert_second: None,
+            attachments: vec![],
+            url: None,
+            notes: Some("Strength training day".to_string()),
+        };
+        db.insert_event("personal", &event)?;
+        count += 1;
+    }
 
-        current = current.succ_opt().unwrap();
+    // Find first Thursday in range
+    let mut first_thursday = start;
+    while first_thursday.weekday() != Weekday::Thu && first_thursday <= end {
+        first_thursday = first_thursday.succ_opt().unwrap_or(first_thursday);
+    }
+
+    if first_thursday <= end {
+        // Weekly Thursday gym
+        let event = CalendarEvent {
+            uid: Uuid::new_v4().to_string(),
+            summary: "Gym Workout".to_string(),
+            location: Some("Fitness Center".to_string()),
+            all_day: false,
+            start: Utc.from_utc_datetime(&first_thursday.and_hms_opt(6, 30, 0).unwrap()),
+            end: Utc.from_utc_datetime(&first_thursday.and_hms_opt(7, 30, 0).unwrap()),
+            travel_time: TravelTime::FifteenMinutes,
+            repeat: RepeatFrequency::Weekly,
+            repeat_until: Some(end),
+            invitees: vec![],
+            alert: AlertTime::ThirtyMinutes,
+            alert_second: None,
+            attachments: vec![],
+            url: None,
+            notes: Some("Strength training day".to_string()),
+        };
+        db.insert_event("personal", &event)?;
+        count += 1;
+    }
+
+    // Find first Saturday in range
+    let mut first_saturday = start;
+    while first_saturday.weekday() != Weekday::Sat && first_saturday <= end {
+        first_saturday = first_saturday.succ_opt().unwrap_or(first_saturday);
+    }
+
+    if first_saturday <= end {
+        // Weekly Saturday run
+        let event = CalendarEvent {
+            uid: Uuid::new_v4().to_string(),
+            summary: "Morning Run".to_string(),
+            location: Some("Park Trail".to_string()),
+            all_day: false,
+            start: Utc.from_utc_datetime(&first_saturday.and_hms_opt(7, 0, 0).unwrap()),
+            end: Utc.from_utc_datetime(&first_saturday.and_hms_opt(8, 0, 0).unwrap()),
+            travel_time: TravelTime::None,
+            repeat: RepeatFrequency::Weekly,
+            repeat_until: Some(end),
+            invitees: vec![],
+            alert: AlertTime::FifteenMinutes,
+            alert_second: None,
+            attachments: vec![],
+            url: None,
+            notes: Some("5K run".to_string()),
+        };
+        db.insert_event("personal", &event)?;
+        count += 1;
     }
 
     Ok(count)
@@ -396,6 +490,7 @@ fn generate_varied_events(db: &Database, start: NaiveDate, end: NaiveDate) -> Re
                         end: Utc.from_utc_datetime(&end_date.and_hms_opt(23, 59, 59).unwrap()),
                         travel_time: TravelTime::None,
                         repeat: RepeatFrequency::Never,
+                        repeat_until: None,
                         invitees: vec![],
                         alert: AlertTime::OneWeek,
                         alert_second: None,
@@ -480,6 +575,7 @@ fn insert_event(
         end: Utc.from_utc_datetime(&end_datetime),
         travel_time: template.travel_time,
         repeat: RepeatFrequency::Never,
+        repeat_until: None,
         invitees: vec![],
         alert: template.alert,
         alert_second: None,

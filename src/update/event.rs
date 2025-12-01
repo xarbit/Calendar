@@ -13,6 +13,21 @@ use crate::caldav::{AlertTime, CalendarEvent, RepeatFrequency, TravelTime};
 use crate::dialogs::{DialogAction, DialogManager, QuickEventResult};
 use crate::services::EventHandler;
 
+/// Extract the master UID from an occurrence UID
+/// Occurrence UIDs have format "master-uid_YYYYMMDD" for recurring events
+/// Returns the original UID if it doesn't match the occurrence pattern
+pub fn extract_master_uid(uid: &str) -> &str {
+    // Check if the UID ends with _YYYYMMDD (8 digits after underscore)
+    if let Some(pos) = uid.rfind('_') {
+        let suffix = &uid[pos + 1..];
+        // Verify it's exactly 8 digits (date format)
+        if suffix.len() == 8 && suffix.chars().all(|c| c.is_ascii_digit()) {
+            return &uid[..pos];
+        }
+    }
+    uid
+}
+
 /// Commit the quick event being edited - create a new event in the selected calendar
 /// Uses DialogManager to get the event data from ActiveDialog::QuickEvent
 /// Supports both single-day and multi-day events (from drag selection)
@@ -88,6 +103,7 @@ pub fn handle_commit_quick_event(app: &mut CosmicCalendar) {
         end,
         travel_time: TravelTime::None,
         repeat: RepeatFrequency::Never,
+        repeat_until: None,
         invitees: vec![],
         alert: AlertTime::None,
         alert_second: None,
@@ -109,18 +125,25 @@ pub fn handle_commit_quick_event(app: &mut CosmicCalendar) {
 
 /// Delete an event by its UID from all calendars
 /// This implements a robust deletion with verification and guaranteed UI refresh
+/// For recurring events, the occurrence UID (format: master-uid_YYYYMMDD) is converted
+/// to the master UID before deletion, which deletes all occurrences.
 pub fn handle_delete_event(app: &mut CosmicCalendar, uid: String) {
-    info!("handle_delete_event: Deleting event uid={}", uid);
+    // Extract master UID for recurring events (occurrence UIDs have format master-uid_YYYYMMDD)
+    let master_uid = extract_master_uid(&uid);
+    info!("handle_delete_event: Deleting event uid={} (master_uid={})", uid, master_uid);
 
-    // Clear selection if deleting the selected event
-    if app.selected_event_uid.as_ref() == Some(&uid) {
-        app.selected_event_uid = None;
-        debug!("handle_delete_event: Cleared selection for deleted event");
+    // Clear selection if deleting the selected event (check both occurrence and master UID)
+    if let Some(selected) = &app.selected_event_uid {
+        if selected == &uid || extract_master_uid(selected) == master_uid {
+            app.selected_event_uid = None;
+            debug!("handle_delete_event: Cleared selection for deleted event");
+        }
     }
 
     // Use EventHandler to delete the event (searches all calendars)
+    // Use master_uid to find the actual event in the database
     // Now returns Result<bool> with verification
-    match EventHandler::delete_event(&mut app.calendar_manager, &uid) {
+    match EventHandler::delete_event(&mut app.calendar_manager, master_uid) {
         Ok(was_deleted) => {
             if was_deleted {
                 info!("handle_delete_event: Event deleted and verified");
@@ -195,13 +218,15 @@ pub fn handle_drag_event_end(app: &mut CosmicCalendar) {
     match move_result {
         Some((uid, original_date, new_date)) => {
             // Event was dragged to a different date - move it
-            info!("handle_drag_event_end: Moving event {} from {} to {}", uid, original_date, new_date);
+            // Extract master UID for recurring events (occurrence UIDs have format master-uid_YYYYMMDD)
+            let master_uid = extract_master_uid(&uid);
+            info!("handle_drag_event_end: Moving event {} (master_uid={}) from {} to {}", uid, master_uid, original_date, new_date);
 
             // Calculate the offset in days
             let offset = (new_date - original_date).num_days();
 
-            // Find the event and move it
-            if let Ok((event, calendar_id)) = EventHandler::find_event(&app.calendar_manager, &uid) {
+            // Find the event and move it (use master UID for recurring events)
+            if let Ok((event, calendar_id)) = EventHandler::find_event(&app.calendar_manager, master_uid) {
                 // Calculate new start and end times by adding the offset
                 let new_start = event.start + chrono::Duration::days(offset);
                 let new_end = event.end + chrono::Duration::days(offset);
@@ -343,13 +368,15 @@ pub fn handle_open_new_event_dialog(app: &mut CosmicCalendar) {
 
 /// Open the event dialog for editing an existing event
 pub fn handle_open_edit_event_dialog(app: &mut CosmicCalendar, uid: String) {
-    debug!("handle_open_edit_event_dialog: Opening edit dialog for uid={}", uid);
+    // Extract master UID for recurring events (occurrence UIDs have format master-uid_YYYYMMDD)
+    let master_uid = extract_master_uid(&uid);
+    debug!("handle_open_edit_event_dialog: Opening edit dialog for uid={} (master_uid={})", uid, master_uid);
 
-    // Use EventHandler to find the event across all calendars
-    let (event, calendar_id) = match EventHandler::find_event(&app.calendar_manager, &uid) {
+    // Use EventHandler to find the event across all calendars (use master UID)
+    let (event, calendar_id) = match EventHandler::find_event(&app.calendar_manager, master_uid) {
         Ok(result) => result,
         Err(e) => {
-            warn!("handle_open_edit_event_dialog: Event not found: {}", e);
+            warn!("handle_open_edit_event_dialog: Event not found: {} (master_uid={})", e, master_uid);
             return;
         }
     };
@@ -449,6 +476,7 @@ pub fn handle_confirm_event_dialog(app: &mut CosmicCalendar) {
         end,
         travel_time: dialog.travel_time,
         repeat: dialog.repeat,
+        repeat_until: None, // TODO: Add to dialog state
         invitees: dialog.invitees,
         alert: dialog.alert,
         alert_second: dialog.alert_second,
