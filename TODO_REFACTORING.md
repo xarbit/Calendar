@@ -424,6 +424,113 @@ to the message handler, and used only within the update module.
 
 ---
 
+## Phase 4: Additional Submodule Extractions
+
+Large files that would benefit from submodule organization, following the patterns established in Phase 2.
+
+### 4.1 Extract Week View Submodules ✅
+**File:** `views/week.rs` (951 lines) → `views/week/` directory
+**Priority:** HIGH
+
+- [x] Create `src/views/week/` directory
+- [x] Extract header rendering to `src/views/week/header.rs`
+  - [x] `render_header_section()` function
+  - [x] `render_day_header()` function
+  - [x] `render_all_day_section()` function
+  - [x] `render_all_day_events_for_day()` function
+- [x] Extract time grid rendering to `src/views/week/time_grid.rs`
+  - [x] `render_time_labels_column()` function
+  - [x] `render_hour_grid_background()` function
+  - [x] `render_clickable_hour_cell()` function
+- [x] Extract events overlay to `src/views/week/events.rs`
+  - [x] `render_events_overlay_layer()` function
+  - [x] `render_column_events()` function
+  - [x] `render_positioned_event_block()` function
+- [x] Extract time indicator to `src/views/week/time_indicator.rs`
+  - [x] `render_time_indicator_layer()` function
+- [x] Extract quick event input to `src/views/week/quick_event.rs`
+  - [x] `render_quick_event_input_layer()` function
+- [x] Extract utilities to `src/views/week/utils.rs`
+  - [x] `PositionedEvent` struct
+  - [x] `separate_events()`, `calculate_max_all_day_slots()` functions
+  - [x] `event_time_range()`, `events_overlap()`, `calculate_event_columns()` functions
+  - [x] Week view constants (`DAY_HEADER_HEIGHT`, `ALL_DAY_*`)
+- [x] Create `src/views/week/mod.rs` as entry point
+- [x] Delete old `src/views/week.rs`
+
+**Completed structure:**
+```
+views/week/
+├── mod.rs           (245 lines) - Main render_week_view, exports
+├── header.rs        (186 lines) - Day headers + all-day events section
+├── time_grid.rs     (103 lines) - Time grid background and hour markers
+├── events.rs        (146 lines) - Event positioning & rendering
+├── time_indicator.rs (90 lines) - Current time indicator
+├── quick_event.rs   (71 lines) - Quick event input overlay
+└── utils.rs         (161 lines) - Helper functions and constants
+```
+
+**Total:** 951 lines organized into 7 logical submodules
+
+---
+
+### 4.2 Extract Selection Submodules ✅
+**File:** `selection.rs` (874 lines) → `selection/` directory
+**Priority:** MEDIUM
+
+- [x] Create `src/selection/` directory
+- [x] Extract selection point to `src/selection/point.rs`
+  - [x] `SelectionPoint` struct and methods
+- [x] Extract selection state to `src/selection/state.rs`
+  - [x] `SelectionState` struct and methods
+- [x] Extract selection range to `src/selection/range.rs`
+  - [x] `SelectionRange` struct and methods
+- [x] Extract drag state to `src/selection/drag.rs`
+  - [x] `EventDragState` struct
+  - [x] `DragPreviewInfo` struct
+  - [x] `DragTarget` struct
+- [x] Create `src/selection/mod.rs` as entry point with tests
+- [x] Delete old `src/selection.rs`
+
+**Completed structure:**
+```
+selection/
+├── mod.rs    (300 lines) - Entry point, re-exports, tests
+├── point.rs  (42 lines) - SelectionPoint struct
+├── state.rs  (167 lines) - SelectionState for drag selection
+├── range.rs  (88 lines) - SelectionRange (normalized)
+└── drag.rs   (234 lines) - EventDragState, DragPreviewInfo, DragTarget
+```
+
+**Total:** 874 lines organized into 5 logical submodules (21 tests preserved)
+
+---
+
+### 4.3 Extract Event Dialog Submodules (Deferred)
+**File:** `components/event_dialog.rs` (581 lines)
+**Priority:** LOW (Deferred)
+
+**Status:** Deferred - The event dialog is a single render function with inline section builders.
+The code is tightly coupled and doesn't naturally decompose into submodules without adding
+complexity. The sections are built inline and passed to a settings::view_column, making
+extraction awkward. The file is already well-organized with clear section comments.
+
+**Potential future improvements:**
+- Extract label helper functions if they grow (travel_time_label, repeat_label, alert_label)
+- Create section builder functions if the dialog gets more complex
+- Consider extraction if the file grows beyond 800+ lines
+
+---
+
+## Progress Tracking
+
+### Phase 4 Status
+- [x] 4.1 Extract Week View Submodules
+- [x] 4.2 Extract Selection Submodules
+- [~] 4.3 Extract Event Dialog Submodules (Deferred)
+
+---
+
 ## Notes
 
 - Always run `cargo build --release` and `cargo test` after changes
