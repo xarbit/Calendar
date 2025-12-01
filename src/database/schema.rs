@@ -378,6 +378,27 @@ mod tests {
     use crate::caldav::{AlertTime, RepeatFrequency, TravelTime};
     use chrono::TimeZone;
 
+    fn create_test_event(uid: &str, summary: &str) -> CalendarEvent {
+        CalendarEvent {
+            uid: uid.to_string(),
+            summary: summary.to_string(),
+            location: None,
+            all_day: false,
+            start: Utc.with_ymd_and_hms(2025, 11, 29, 10, 0, 0).unwrap(),
+            end: Utc.with_ymd_and_hms(2025, 11, 29, 11, 0, 0).unwrap(),
+            travel_time: TravelTime::None,
+            repeat: RepeatFrequency::Never,
+            invitees: vec![],
+            alert: AlertTime::None,
+            alert_second: None,
+            attachments: vec![],
+            url: None,
+            notes: None,
+        }
+    }
+
+    // ==================== Database Creation Tests ====================
+
     #[test]
     fn test_database_creation() {
         let temp_dir = std::env::temp_dir();
@@ -395,6 +416,28 @@ mod tests {
         // Clean up
         let _ = std::fs::remove_file(&db_path);
     }
+
+    #[test]
+    fn test_database_path() {
+        let path = Database::get_database_path();
+        assert!(path.to_string_lossy().contains("sol-calendar"));
+        assert!(path.to_string_lossy().contains("sol.db"));
+    }
+
+    #[test]
+    fn test_database_debug() {
+        let temp_dir = std::env::temp_dir();
+        let db_path = temp_dir.join("sol_test_debug.db");
+        let _ = std::fs::remove_file(&db_path);
+
+        let db = Database::open_at(db_path.clone()).unwrap();
+        let debug_str = format!("{:?}", db);
+        assert!(debug_str.contains("Database"));
+
+        let _ = std::fs::remove_file(&db_path);
+    }
+
+    // ==================== Event CRUD Tests ====================
 
     #[test]
     fn test_event_operations() {
@@ -442,6 +485,255 @@ mod tests {
         assert_eq!(rows, 1);
 
         // Clean up
+        let _ = std::fs::remove_file(&db_path);
+    }
+
+    #[test]
+    fn test_insert_event_with_all_fields() {
+        let temp_dir = std::env::temp_dir();
+        let db_path = temp_dir.join("sol_test_all_fields.db");
+        let _ = std::fs::remove_file(&db_path);
+
+        let db = Database::open_at(db_path.clone()).unwrap();
+
+        let event = CalendarEvent {
+            uid: "full-event-1".to_string(),
+            summary: "Full Event".to_string(),
+            location: Some("Conference Room A".to_string()),
+            all_day: true,
+            start: Utc.with_ymd_and_hms(2025, 12, 1, 0, 0, 0).unwrap(),
+            end: Utc.with_ymd_and_hms(2025, 12, 1, 23, 59, 59).unwrap(),
+            travel_time: TravelTime::ThirtyMinutes,
+            repeat: RepeatFrequency::Weekly,
+            invitees: vec!["alice@example.com".to_string(), "bob@example.com".to_string()],
+            alert: AlertTime::FifteenMinutes,
+            alert_second: Some(AlertTime::OneHour),
+            attachments: vec!["doc.pdf".to_string()],
+            url: Some("https://example.com/meeting".to_string()),
+            notes: Some("Important meeting notes".to_string()),
+        };
+
+        db.insert_event("work", &event).unwrap();
+
+        let events = db.get_events_for_calendar("work").unwrap();
+        assert_eq!(events.len(), 1);
+        let retrieved = &events[0];
+
+        assert_eq!(retrieved.uid, "full-event-1");
+        assert_eq!(retrieved.summary, "Full Event");
+        assert_eq!(retrieved.location, Some("Conference Room A".to_string()));
+        assert!(retrieved.all_day);
+        assert_eq!(retrieved.travel_time, TravelTime::ThirtyMinutes);
+        assert_eq!(retrieved.repeat, RepeatFrequency::Weekly);
+        assert_eq!(retrieved.invitees.len(), 2);
+        assert_eq!(retrieved.alert, AlertTime::FifteenMinutes);
+        assert!(retrieved.alert_second.is_some());
+        assert_eq!(retrieved.attachments.len(), 1);
+        assert_eq!(retrieved.url, Some("https://example.com/meeting".to_string()));
+        assert_eq!(retrieved.notes, Some("Important meeting notes".to_string()));
+
+        let _ = std::fs::remove_file(&db_path);
+    }
+
+    #[test]
+    fn test_update_event() {
+        let temp_dir = std::env::temp_dir();
+        let db_path = temp_dir.join("sol_test_update.db");
+        let _ = std::fs::remove_file(&db_path);
+
+        let db = Database::open_at(db_path.clone()).unwrap();
+
+        let mut event = create_test_event("update-1", "Original Title");
+        db.insert_event("cal1", &event).unwrap();
+
+        // Update the event
+        event.summary = "Updated Title".to_string();
+        event.location = Some("New Location".to_string());
+        event.notes = Some("Updated notes".to_string());
+        db.update_event(&event).unwrap();
+
+        let events = db.get_events_for_calendar("cal1").unwrap();
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].summary, "Updated Title");
+        assert_eq!(events[0].location, Some("New Location".to_string()));
+        assert_eq!(events[0].notes, Some("Updated notes".to_string()));
+
+        let _ = std::fs::remove_file(&db_path);
+    }
+
+    #[test]
+    fn test_delete_nonexistent_event() {
+        let temp_dir = std::env::temp_dir();
+        let db_path = temp_dir.join("sol_test_delete_none.db");
+        let _ = std::fs::remove_file(&db_path);
+
+        let db = Database::open_at(db_path.clone()).unwrap();
+
+        let deleted = db.delete_event("nonexistent").unwrap();
+        assert!(!deleted);
+
+        let _ = std::fs::remove_file(&db_path);
+    }
+
+    // ==================== Multiple Events Tests ====================
+
+    #[test]
+    fn test_multiple_events_same_calendar() {
+        let temp_dir = std::env::temp_dir();
+        let db_path = temp_dir.join("sol_test_multi.db");
+        let _ = std::fs::remove_file(&db_path);
+
+        let db = Database::open_at(db_path.clone()).unwrap();
+
+        for i in 1..=5 {
+            let event = create_test_event(&format!("event-{}", i), &format!("Event {}", i));
+            db.insert_event("cal1", &event).unwrap();
+        }
+
+        let events = db.get_events_for_calendar("cal1").unwrap();
+        assert_eq!(events.len(), 5);
+
+        let _ = std::fs::remove_file(&db_path);
+    }
+
+    #[test]
+    fn test_events_multiple_calendars() {
+        let temp_dir = std::env::temp_dir();
+        let db_path = temp_dir.join("sol_test_multi_cal.db");
+        let _ = std::fs::remove_file(&db_path);
+
+        let db = Database::open_at(db_path.clone()).unwrap();
+
+        // Add events to different calendars
+        db.insert_event("work", &create_test_event("work-1", "Work Event 1")).unwrap();
+        db.insert_event("work", &create_test_event("work-2", "Work Event 2")).unwrap();
+        db.insert_event("personal", &create_test_event("personal-1", "Personal Event")).unwrap();
+
+        // Check each calendar has correct events
+        let work_events = db.get_events_for_calendar("work").unwrap();
+        assert_eq!(work_events.len(), 2);
+
+        let personal_events = db.get_events_for_calendar("personal").unwrap();
+        assert_eq!(personal_events.len(), 1);
+
+        // Delete events for one calendar
+        db.delete_events_for_calendar("work").unwrap();
+
+        let work_events = db.get_events_for_calendar("work").unwrap();
+        assert_eq!(work_events.len(), 0);
+
+        // Personal events should be unaffected
+        let personal_events = db.get_events_for_calendar("personal").unwrap();
+        assert_eq!(personal_events.len(), 1);
+
+        let _ = std::fs::remove_file(&db_path);
+    }
+
+    // ==================== clear_all_events Tests ====================
+
+    #[test]
+    fn test_clear_all_events() {
+        let temp_dir = std::env::temp_dir();
+        let db_path = temp_dir.join("sol_test_clear.db");
+        let _ = std::fs::remove_file(&db_path);
+
+        let db = Database::open_at(db_path.clone()).unwrap();
+
+        // Add events to multiple calendars
+        db.insert_event("cal1", &create_test_event("e1", "Event 1")).unwrap();
+        db.insert_event("cal2", &create_test_event("e2", "Event 2")).unwrap();
+        db.insert_event("cal3", &create_test_event("e3", "Event 3")).unwrap();
+
+        let count = db.clear_all_events().unwrap();
+        assert_eq!(count, 3);
+
+        // All calendars should be empty
+        assert_eq!(db.get_events_for_calendar("cal1").unwrap().len(), 0);
+        assert_eq!(db.get_events_for_calendar("cal2").unwrap().len(), 0);
+        assert_eq!(db.get_events_for_calendar("cal3").unwrap().len(), 0);
+
+        let _ = std::fs::remove_file(&db_path);
+    }
+
+    #[test]
+    fn test_clear_all_events_empty_db() {
+        let temp_dir = std::env::temp_dir();
+        let db_path = temp_dir.join("sol_test_clear_empty.db");
+        let _ = std::fs::remove_file(&db_path);
+
+        let db = Database::open_at(db_path.clone()).unwrap();
+
+        let count = db.clear_all_events().unwrap();
+        assert_eq!(count, 0);
+
+        let _ = std::fs::remove_file(&db_path);
+    }
+
+    // ==================== Unicode and Special Characters Tests ====================
+
+    #[test]
+    fn test_unicode_event_data() {
+        let temp_dir = std::env::temp_dir();
+        let db_path = temp_dir.join("sol_test_unicode.db");
+        let _ = std::fs::remove_file(&db_path);
+
+        let db = Database::open_at(db_path.clone()).unwrap();
+
+        let event = CalendarEvent {
+            uid: "unicode-1".to_string(),
+            summary: "会议 Meeting 📅".to_string(),
+            location: Some("北京 Beijing 🌏".to_string()),
+            all_day: false,
+            start: Utc.with_ymd_and_hms(2025, 12, 1, 10, 0, 0).unwrap(),
+            end: Utc.with_ymd_and_hms(2025, 12, 1, 11, 0, 0).unwrap(),
+            travel_time: TravelTime::None,
+            repeat: RepeatFrequency::Never,
+            invitees: vec!["用户@example.com".to_string()],
+            alert: AlertTime::None,
+            alert_second: None,
+            attachments: vec!["文档.pdf".to_string()],
+            url: Some("https://example.com/会议".to_string()),
+            notes: Some("备注 Notes 🗒️".to_string()),
+        };
+
+        db.insert_event("cal1", &event).unwrap();
+
+        let events = db.get_events_for_calendar("cal1").unwrap();
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].summary, "会议 Meeting 📅");
+        assert_eq!(events[0].location, Some("北京 Beijing 🌏".to_string()));
+        assert_eq!(events[0].notes, Some("备注 Notes 🗒️".to_string()));
+
+        let _ = std::fs::remove_file(&db_path);
+    }
+
+    // ==================== Empty Calendar Tests ====================
+
+    #[test]
+    fn test_get_events_empty_calendar() {
+        let temp_dir = std::env::temp_dir();
+        let db_path = temp_dir.join("sol_test_empty_cal.db");
+        let _ = std::fs::remove_file(&db_path);
+
+        let db = Database::open_at(db_path.clone()).unwrap();
+
+        let events = db.get_events_for_calendar("nonexistent").unwrap();
+        assert_eq!(events.len(), 0);
+
+        let _ = std::fs::remove_file(&db_path);
+    }
+
+    #[test]
+    fn test_delete_events_empty_calendar() {
+        let temp_dir = std::env::temp_dir();
+        let db_path = temp_dir.join("sol_test_del_empty.db");
+        let _ = std::fs::remove_file(&db_path);
+
+        let db = Database::open_at(db_path.clone()).unwrap();
+
+        let count = db.delete_events_for_calendar("nonexistent").unwrap();
+        assert_eq!(count, 0);
+
         let _ = std::fs::remove_file(&db_path);
     }
 }

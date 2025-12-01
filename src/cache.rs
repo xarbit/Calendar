@@ -147,3 +147,272 @@ pub struct CacheStats {
     pub period_texts_cached: usize,
     pub current_month: (i32, u32),
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ==================== Cache Creation Tests ====================
+
+    #[test]
+    fn test_cache_new() {
+        let cache = CalendarCache::new(2024, 6);
+        assert_eq!(cache.current, (2024, 6));
+        assert!(cache.states.contains_key(&(2024, 6)));
+        assert!(cache.period_texts.contains_key(&(2024, 6)));
+    }
+
+    #[test]
+    fn test_cache_new_january() {
+        let cache = CalendarCache::new(2024, 1);
+        assert_eq!(cache.current, (2024, 1));
+    }
+
+    #[test]
+    fn test_cache_new_december() {
+        let cache = CalendarCache::new(2024, 12);
+        assert_eq!(cache.current, (2024, 12));
+    }
+
+    // ==================== set_current Tests ====================
+
+    #[test]
+    fn test_set_current_new_month() {
+        let mut cache = CalendarCache::new(2024, 6);
+        cache.set_current(2024, 7);
+        assert_eq!(cache.current, (2024, 7));
+        assert!(cache.states.contains_key(&(2024, 7)));
+    }
+
+    #[test]
+    fn test_set_current_same_month() {
+        let mut cache = CalendarCache::new(2024, 6);
+        let initial_states_count = cache.states.len();
+        cache.set_current(2024, 6);
+        assert_eq!(cache.states.len(), initial_states_count);
+    }
+
+    #[test]
+    fn test_set_current_cross_year_forward() {
+        let mut cache = CalendarCache::new(2024, 12);
+        cache.set_current(2025, 1);
+        assert_eq!(cache.current, (2025, 1));
+        assert!(cache.states.contains_key(&(2025, 1)));
+    }
+
+    #[test]
+    fn test_set_current_cross_year_backward() {
+        let mut cache = CalendarCache::new(2024, 1);
+        cache.set_current(2023, 12);
+        assert_eq!(cache.current, (2023, 12));
+        assert!(cache.states.contains_key(&(2023, 12)));
+    }
+
+    // ==================== current_state Tests ====================
+
+    #[test]
+    fn test_current_state() {
+        let cache = CalendarCache::new(2024, 6);
+        let state = cache.current_state();
+        assert_eq!(state.year, 2024);
+        assert_eq!(state.month, 6);
+    }
+
+    // ==================== current_period_text Tests ====================
+
+    #[test]
+    fn test_current_period_text() {
+        let cache = CalendarCache::new(2024, 6);
+        let text = cache.current_period_text();
+        assert!(text.contains("June"));
+        assert!(text.contains("2024"));
+    }
+
+    #[test]
+    fn test_current_period_text_january() {
+        let cache = CalendarCache::new(2024, 1);
+        let text = cache.current_period_text();
+        assert!(text.contains("January"));
+    }
+
+    #[test]
+    fn test_current_period_text_december() {
+        let cache = CalendarCache::new(2024, 12);
+        let text = cache.current_period_text();
+        assert!(text.contains("December"));
+    }
+
+    // ==================== current_month_text Tests ====================
+
+    #[test]
+    fn test_current_month_text() {
+        let cache = CalendarCache::new(2024, 6);
+        assert_eq!(cache.current_month_text(), "June");
+    }
+
+    #[test]
+    fn test_current_month_text_all_months() {
+        let months = [
+            "January", "February", "March", "April", "May", "June",
+            "July", "August", "September", "October", "November", "December"
+        ];
+        for (i, month_name) in months.iter().enumerate() {
+            let cache = CalendarCache::new(2024, (i + 1) as u32);
+            assert_eq!(cache.current_month_text(), *month_name);
+        }
+    }
+
+    // ==================== current_year_text Tests ====================
+
+    #[test]
+    fn test_current_year_text() {
+        let cache = CalendarCache::new(2024, 6);
+        assert_eq!(cache.current_year_text(), "2024");
+    }
+
+    #[test]
+    fn test_current_year_text_various_years() {
+        for year in [1999, 2000, 2024, 2050, 2100] {
+            let cache = CalendarCache::new(year, 1);
+            assert_eq!(cache.current_year_text(), year.to_string());
+        }
+    }
+
+    // ==================== add_months Tests ====================
+
+    #[test]
+    fn test_add_months_same_year() {
+        let cache = CalendarCache::new(2024, 1);
+        assert_eq!(cache.add_months(2024, 1, 1), (2024, 2));
+        assert_eq!(cache.add_months(2024, 1, 6), (2024, 7));
+        assert_eq!(cache.add_months(2024, 1, 11), (2024, 12));
+    }
+
+    #[test]
+    fn test_add_months_cross_year() {
+        let cache = CalendarCache::new(2024, 1);
+        assert_eq!(cache.add_months(2024, 1, 12), (2025, 1));
+        assert_eq!(cache.add_months(2024, 6, 12), (2025, 6));
+        assert_eq!(cache.add_months(2024, 12, 1), (2025, 1));
+    }
+
+    #[test]
+    fn test_add_months_multiple_years() {
+        let cache = CalendarCache::new(2024, 1);
+        assert_eq!(cache.add_months(2024, 1, 24), (2026, 1));
+        assert_eq!(cache.add_months(2024, 1, 36), (2027, 1));
+    }
+
+    // ==================== subtract_months Tests ====================
+
+    #[test]
+    fn test_subtract_months_same_year() {
+        let cache = CalendarCache::new(2024, 12);
+        assert_eq!(cache.subtract_months(2024, 12, 1), (2024, 11));
+        assert_eq!(cache.subtract_months(2024, 12, 6), (2024, 6));
+        assert_eq!(cache.subtract_months(2024, 12, 11), (2024, 1));
+    }
+
+    #[test]
+    fn test_subtract_months_cross_year() {
+        let cache = CalendarCache::new(2024, 1);
+        assert_eq!(cache.subtract_months(2024, 1, 1), (2023, 12));
+        assert_eq!(cache.subtract_months(2024, 6, 12), (2023, 6));
+    }
+
+    #[test]
+    fn test_subtract_months_multiple_years() {
+        let cache = CalendarCache::new(2024, 1);
+        assert_eq!(cache.subtract_months(2024, 1, 24), (2022, 1));
+        assert_eq!(cache.subtract_months(2024, 1, 36), (2021, 1));
+    }
+
+    // ==================== precache_surrounding Tests ====================
+
+    #[test]
+    fn test_precache_surrounding() {
+        let mut cache = CalendarCache::new(2024, 6);
+        cache.precache_surrounding(2, 2);
+
+        // Should have current + 2 before + 2 after = 5 months cached
+        assert!(cache.states.contains_key(&(2024, 4)));
+        assert!(cache.states.contains_key(&(2024, 5)));
+        assert!(cache.states.contains_key(&(2024, 6)));
+        assert!(cache.states.contains_key(&(2024, 7)));
+        assert!(cache.states.contains_key(&(2024, 8)));
+    }
+
+    #[test]
+    fn test_precache_surrounding_cross_year() {
+        let mut cache = CalendarCache::new(2024, 1);
+        cache.precache_surrounding(2, 2);
+
+        // Should cache Nov 2023, Dec 2023, Jan 2024, Feb 2024, Mar 2024
+        assert!(cache.states.contains_key(&(2023, 11)));
+        assert!(cache.states.contains_key(&(2023, 12)));
+        assert!(cache.states.contains_key(&(2024, 1)));
+        assert!(cache.states.contains_key(&(2024, 2)));
+        assert!(cache.states.contains_key(&(2024, 3)));
+    }
+
+    // ==================== cleanup Tests ====================
+
+    #[test]
+    fn test_cleanup() {
+        let mut cache = CalendarCache::new(2024, 6);
+        // Pre-cache many months
+        cache.precache_surrounding(6, 6);
+
+        let initial_count = cache.states.len();
+        assert!(initial_count > 3);
+
+        // Cleanup to keep only radius of 1
+        cache.cleanup(1);
+
+        // Should only keep current month and ±1 month = 3 months
+        assert_eq!(cache.states.len(), 3);
+        assert!(cache.states.contains_key(&(2024, 5)));
+        assert!(cache.states.contains_key(&(2024, 6)));
+        assert!(cache.states.contains_key(&(2024, 7)));
+    }
+
+    #[test]
+    fn test_cleanup_cross_year() {
+        let mut cache = CalendarCache::new(2024, 1);
+        cache.precache_surrounding(3, 3);
+        cache.cleanup(1);
+
+        // Should keep Dec 2023, Jan 2024, Feb 2024
+        assert_eq!(cache.states.len(), 3);
+        assert!(cache.states.contains_key(&(2023, 12)));
+        assert!(cache.states.contains_key(&(2024, 1)));
+        assert!(cache.states.contains_key(&(2024, 2)));
+    }
+
+    // ==================== stats Tests ====================
+
+    #[test]
+    fn test_stats() {
+        let mut cache = CalendarCache::new(2024, 6);
+        cache.precache_surrounding(1, 1);
+
+        let stats = cache.stats();
+        assert_eq!(stats.states_cached, 3);
+        assert_eq!(stats.period_texts_cached, 3);
+        assert_eq!(stats.current_month, (2024, 6));
+    }
+
+    // ==================== CacheStats Debug Tests ====================
+
+    #[test]
+    fn test_cache_stats_debug() {
+        let stats = CacheStats {
+            states_cached: 5,
+            period_texts_cached: 5,
+            current_month: (2024, 6),
+        };
+        let debug_str = format!("{:?}", stats);
+        assert!(debug_str.contains("states_cached"));
+        assert!(debug_str.contains("5"));
+    }
+}

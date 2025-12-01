@@ -305,7 +305,33 @@ fn detect_date_format(locale: &str) -> DateFormat {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::Weekday;
+    use chrono::{NaiveDate, Weekday};
+
+    // ==================== DateFormat Tests ====================
+
+    #[test]
+    fn test_date_format_variants() {
+        // Ensure all variants are distinct
+        assert_ne!(DateFormat::DMY, DateFormat::MDY);
+        assert_ne!(DateFormat::MDY, DateFormat::YMD);
+        assert_ne!(DateFormat::DMY, DateFormat::YMD);
+    }
+
+    #[test]
+    fn test_date_format_debug() {
+        assert_eq!(format!("{:?}", DateFormat::DMY), "DMY");
+        assert_eq!(format!("{:?}", DateFormat::MDY), "MDY");
+        assert_eq!(format!("{:?}", DateFormat::YMD), "YMD");
+    }
+
+    #[test]
+    fn test_date_format_clone() {
+        let format = DateFormat::DMY;
+        let cloned = format.clone();
+        assert_eq!(format, cloned);
+    }
+
+    // ==================== 24-Hour Format Detection Tests ====================
 
     #[test]
     fn test_24_hour_detection() {
@@ -317,6 +343,30 @@ mod tests {
     }
 
     #[test]
+    fn test_24_hour_detection_more_locales() {
+        // 24-hour locales
+        assert!(detect_24_hour_format("es_ES.UTF-8"));
+        assert!(detect_24_hour_format("it_IT.UTF-8"));
+        assert!(detect_24_hour_format("pl_PL.UTF-8"));
+        assert!(detect_24_hour_format("ru_RU.UTF-8"));
+        assert!(detect_24_hour_format("sv_SE.UTF-8"));
+
+        // 12-hour locales
+        assert!(!detect_24_hour_format("en_AU.UTF-8"));
+        assert!(!detect_24_hour_format("en_NZ.UTF-8"));
+        assert!(!detect_24_hour_format("en_PH.UTF-8"));
+        assert!(!detect_24_hour_format("fil_PH.UTF-8"));
+    }
+
+    #[test]
+    fn test_24_hour_case_insensitive() {
+        assert!(!detect_24_hour_format("EN_US.UTF-8"));
+        assert!(!detect_24_hour_format("En_Us.utf-8"));
+    }
+
+    // ==================== First Day of Week Detection Tests ====================
+
+    #[test]
     fn test_first_day_detection() {
         assert_eq!(detect_first_day_of_week("de_DE.UTF-8"), Weekday::Mon);
         assert_eq!(detect_first_day_of_week("en_GB.UTF-8"), Weekday::Mon);
@@ -324,6 +374,54 @@ mod tests {
         assert_eq!(detect_first_day_of_week("ja_JP.UTF-8"), Weekday::Sun);
         assert_eq!(detect_first_day_of_week("ar_SA.UTF-8"), Weekday::Sun);
     }
+
+    #[test]
+    fn test_first_day_more_locales() {
+        // Monday-starting
+        assert_eq!(detect_first_day_of_week("fr_FR.UTF-8"), Weekday::Mon);
+        assert_eq!(detect_first_day_of_week("es_ES.UTF-8"), Weekday::Mon);
+        assert_eq!(detect_first_day_of_week("it_IT.UTF-8"), Weekday::Mon);
+
+        // Sunday-starting
+        assert_eq!(detect_first_day_of_week("zh_CN.UTF-8"), Weekday::Sun);
+        assert_eq!(detect_first_day_of_week("ko_KR.UTF-8"), Weekday::Sun);
+        assert_eq!(detect_first_day_of_week("pt_BR.UTF-8"), Weekday::Sun);
+
+        // Saturday-starting (Middle Eastern)
+        assert_eq!(detect_first_day_of_week("ar_IQ.UTF-8"), Weekday::Sat);
+        assert_eq!(detect_first_day_of_week("ar_SY.UTF-8"), Weekday::Sat);
+    }
+
+    // ==================== Date Format Detection Tests ====================
+
+    #[test]
+    fn test_date_format_detection() {
+        assert_eq!(detect_date_format("en_US.UTF-8"), DateFormat::MDY);
+        assert_eq!(detect_date_format("en_GB.UTF-8"), DateFormat::DMY);
+        assert_eq!(detect_date_format("de_DE.UTF-8"), DateFormat::DMY);
+        assert_eq!(detect_date_format("ja_JP.UTF-8"), DateFormat::YMD);
+        assert_eq!(detect_date_format("zh_CN.UTF-8"), DateFormat::YMD);
+        assert_eq!(detect_date_format("ko_KR.UTF-8"), DateFormat::YMD);
+    }
+
+    #[test]
+    fn test_date_format_more_locales() {
+        // MDY locales
+        assert_eq!(detect_date_format("en_CA.UTF-8"), DateFormat::MDY);
+        assert_eq!(detect_date_format("en_PH.UTF-8"), DateFormat::MDY);
+
+        // DMY locales (most of the world)
+        assert_eq!(detect_date_format("fr_FR.UTF-8"), DateFormat::DMY);
+        assert_eq!(detect_date_format("es_ES.UTF-8"), DateFormat::DMY);
+        assert_eq!(detect_date_format("pt_PT.UTF-8"), DateFormat::DMY);
+        assert_eq!(detect_date_format("ru_RU.UTF-8"), DateFormat::DMY);
+
+        // YMD locales
+        assert_eq!(detect_date_format("zh_TW.UTF-8"), DateFormat::YMD);
+        assert_eq!(detect_date_format("hu_HU.UTF-8"), DateFormat::YMD);
+    }
+
+    // ==================== Hour Formatting Tests ====================
 
     #[test]
     fn test_hour_formatting() {
@@ -352,12 +450,249 @@ mod tests {
     }
 
     #[test]
-    fn test_date_format_detection() {
-        assert_eq!(detect_date_format("en_US.UTF-8"), DateFormat::MDY);
-        assert_eq!(detect_date_format("en_GB.UTF-8"), DateFormat::DMY);
-        assert_eq!(detect_date_format("de_DE.UTF-8"), DateFormat::DMY);
-        assert_eq!(detect_date_format("ja_JP.UTF-8"), DateFormat::YMD);
-        assert_eq!(detect_date_format("zh_CN.UTF-8"), DateFormat::YMD);
-        assert_eq!(detect_date_format("ko_KR.UTF-8"), DateFormat::YMD);
+    fn test_hour_formatting_all_hours_24h() {
+        let locale = LocalePreferences {
+            use_24_hour: true,
+            first_day_of_week: Weekday::Mon,
+            date_format: DateFormat::DMY,
+            locale_string: "de_DE.UTF-8".to_string(),
+        };
+
+        for hour in 0..24 {
+            let formatted = locale.format_hour(hour);
+            assert!(formatted.ends_with(":00"));
+            assert!(formatted.len() == 5); // "HH:00"
+        }
+    }
+
+    #[test]
+    fn test_hour_formatting_all_hours_12h() {
+        let locale = LocalePreferences {
+            use_24_hour: false,
+            first_day_of_week: Weekday::Sun,
+            date_format: DateFormat::MDY,
+            locale_string: "en_US.UTF-8".to_string(),
+        };
+
+        for hour in 0..24 {
+            let formatted = locale.format_hour(hour);
+            assert!(formatted.contains("AM") || formatted.contains("PM"));
+        }
+    }
+
+    // ==================== days_from_monday Tests ====================
+
+    #[test]
+    fn test_days_from_monday() {
+        let locale_mon = LocalePreferences {
+            use_24_hour: true,
+            first_day_of_week: Weekday::Mon,
+            date_format: DateFormat::DMY,
+            locale_string: "de_DE.UTF-8".to_string(),
+        };
+        assert_eq!(locale_mon.days_from_monday(), 0);
+
+        let locale_sun = LocalePreferences {
+            use_24_hour: false,
+            first_day_of_week: Weekday::Sun,
+            date_format: DateFormat::MDY,
+            locale_string: "en_US.UTF-8".to_string(),
+        };
+        assert_eq!(locale_sun.days_from_monday(), -6);
+
+        let locale_sat = LocalePreferences {
+            use_24_hour: true,
+            first_day_of_week: Weekday::Sat,
+            date_format: DateFormat::DMY,
+            locale_string: "ar_IQ.UTF-8".to_string(),
+        };
+        assert_eq!(locale_sat.days_from_monday(), -5);
+    }
+
+    // ==================== is_weekend Tests ====================
+
+    #[test]
+    fn test_is_weekend() {
+        let locale = LocalePreferences {
+            use_24_hour: true,
+            first_day_of_week: Weekday::Mon,
+            date_format: DateFormat::DMY,
+            locale_string: "de_DE.UTF-8".to_string(),
+        };
+
+        assert!(locale.is_weekend(Weekday::Sat));
+        assert!(locale.is_weekend(Weekday::Sun));
+        assert!(!locale.is_weekend(Weekday::Mon));
+        assert!(!locale.is_weekend(Weekday::Tue));
+        assert!(!locale.is_weekend(Weekday::Wed));
+        assert!(!locale.is_weekend(Weekday::Thu));
+        assert!(!locale.is_weekend(Weekday::Fri));
+    }
+
+    // ==================== format_week_range Tests ====================
+
+    #[test]
+    fn test_format_week_range_mdy_same_month() {
+        let locale = LocalePreferences {
+            use_24_hour: false,
+            first_day_of_week: Weekday::Sun,
+            date_format: DateFormat::MDY,
+            locale_string: "en_US.UTF-8".to_string(),
+        };
+
+        let first = NaiveDate::from_ymd_opt(2024, 11, 24).unwrap();
+        let last = NaiveDate::from_ymd_opt(2024, 11, 30).unwrap();
+
+        let result = locale.format_week_range(&first, &last, 48);
+        assert!(result.contains("W48"));
+        assert!(result.contains("Nov"));
+        assert!(result.contains("24"));
+        assert!(result.contains("30"));
+    }
+
+    #[test]
+    fn test_format_week_range_dmy_same_month() {
+        let locale = LocalePreferences {
+            use_24_hour: true,
+            first_day_of_week: Weekday::Mon,
+            date_format: DateFormat::DMY,
+            locale_string: "en_GB.UTF-8".to_string(),
+        };
+
+        let first = NaiveDate::from_ymd_opt(2024, 11, 25).unwrap();
+        let last = NaiveDate::from_ymd_opt(2024, 11, 30).unwrap();
+
+        let result = locale.format_week_range(&first, &last, 48);
+        assert!(result.contains("W48"));
+        assert!(result.contains("25"));
+        assert!(result.contains("30"));
+    }
+
+    #[test]
+    fn test_format_week_range_ymd() {
+        let locale = LocalePreferences {
+            use_24_hour: true,
+            first_day_of_week: Weekday::Sun,
+            date_format: DateFormat::YMD,
+            locale_string: "ja_JP.UTF-8".to_string(),
+        };
+
+        let first = NaiveDate::from_ymd_opt(2024, 11, 24).unwrap();
+        let last = NaiveDate::from_ymd_opt(2024, 11, 30).unwrap();
+
+        let result = locale.format_week_range(&first, &last, 48);
+        assert!(result.contains("W48"));
+        assert!(result.contains("2024"));
+    }
+
+    // ==================== format_day_header Tests ====================
+
+    #[test]
+    fn test_format_day_header_mdy() {
+        let locale = LocalePreferences {
+            use_24_hour: false,
+            first_day_of_week: Weekday::Sun,
+            date_format: DateFormat::MDY,
+            locale_string: "en_US.UTF-8".to_string(),
+        };
+
+        let date = NaiveDate::from_ymd_opt(2024, 11, 25).unwrap();
+        let result = locale.format_day_header(&date, "Monday");
+
+        assert!(result.contains("Monday"));
+        assert!(result.contains("Nov"));
+        assert!(result.contains("25"));
+    }
+
+    #[test]
+    fn test_format_day_header_dmy() {
+        let locale = LocalePreferences {
+            use_24_hour: true,
+            first_day_of_week: Weekday::Mon,
+            date_format: DateFormat::DMY,
+            locale_string: "en_GB.UTF-8".to_string(),
+        };
+
+        let date = NaiveDate::from_ymd_opt(2024, 11, 25).unwrap();
+        let result = locale.format_day_header(&date, "Monday");
+
+        assert!(result.contains("Monday"));
+        assert!(result.contains("25"));
+        assert!(result.contains("Nov"));
+    }
+
+    #[test]
+    fn test_format_day_header_ymd() {
+        let locale = LocalePreferences {
+            use_24_hour: true,
+            first_day_of_week: Weekday::Sun,
+            date_format: DateFormat::YMD,
+            locale_string: "ja_JP.UTF-8".to_string(),
+        };
+
+        let date = NaiveDate::from_ymd_opt(2024, 11, 25).unwrap();
+        let result = locale.format_day_header(&date, "Monday");
+
+        assert!(result.contains("Monday"));
+        assert!(result.contains("2024-11-25"));
+    }
+
+    // ==================== LocalePreferences Tests ====================
+
+    #[test]
+    fn test_locale_preferences_clone() {
+        let locale = LocalePreferences {
+            use_24_hour: true,
+            first_day_of_week: Weekday::Mon,
+            date_format: DateFormat::DMY,
+            locale_string: "de_DE.UTF-8".to_string(),
+        };
+
+        let cloned = locale.clone();
+        assert_eq!(locale.use_24_hour, cloned.use_24_hour);
+        assert_eq!(locale.first_day_of_week, cloned.first_day_of_week);
+        assert_eq!(locale.date_format, cloned.date_format);
+        assert_eq!(locale.locale_string, cloned.locale_string);
+    }
+
+    #[test]
+    fn test_locale_preferences_debug() {
+        let locale = LocalePreferences {
+            use_24_hour: true,
+            first_day_of_week: Weekday::Mon,
+            date_format: DateFormat::DMY,
+            locale_string: "de_DE.UTF-8".to_string(),
+        };
+
+        let debug_str = format!("{:?}", locale);
+        assert!(debug_str.contains("LocalePreferences"));
+        assert!(debug_str.contains("use_24_hour"));
+    }
+
+    #[test]
+    fn test_locale_preferences_partial_eq() {
+        let locale1 = LocalePreferences {
+            use_24_hour: true,
+            first_day_of_week: Weekday::Mon,
+            date_format: DateFormat::DMY,
+            locale_string: "de_DE.UTF-8".to_string(),
+        };
+
+        let locale2 = LocalePreferences {
+            use_24_hour: true,
+            first_day_of_week: Weekday::Mon,
+            date_format: DateFormat::DMY,
+            locale_string: "de_DE.UTF-8".to_string(),
+        };
+
+        let locale3 = LocalePreferences {
+            use_24_hour: false,
+            first_day_of_week: Weekday::Sun,
+            date_format: DateFormat::MDY,
+            locale_string: "en_US.UTF-8".to_string(),
+        };
+
+        assert_eq!(locale1, locale2);
+        assert_ne!(locale1, locale3);
     }
 }
