@@ -172,6 +172,33 @@ pub fn adjacent_month_selection_style(theme: &cosmic::Theme) -> container::Style
     }
 }
 
+/// Style for a grid cell with border and optional weekend background
+/// Used in time grid rendering for hour slots
+pub fn grid_cell_style(is_weekend: bool) -> container::Style {
+    container::Style {
+        background: weekend_background(is_weekend),
+        border: Border {
+            width: BORDER_WIDTH_NORMAL,
+            color: COLOR_DAY_CELL_BORDER,
+            ..Default::default()
+        },
+        ..Default::default()
+    }
+}
+
+/// Style for a bordered cell without weekend background
+/// Used for time labels and header cells
+pub fn bordered_cell_style() -> container::Style {
+    container::Style {
+        border: Border {
+            width: BORDER_WIDTH_NORMAL,
+            color: COLOR_DAY_CELL_BORDER,
+            ..Default::default()
+        },
+        ..Default::default()
+    }
+}
+
 /// Style for a day cell that is the current drop target during event drag
 /// Uses a dashed-like appearance with accent color to indicate where the event will land
 pub fn drag_target_style(theme: &cosmic::Theme, is_weekend: bool) -> container::Style {

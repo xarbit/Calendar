@@ -97,27 +97,3 @@ pub fn render_time_column_placeholder(height: f32) -> Element<'static, Message> 
         .into()
 }
 
-/// Style for a grid cell with border
-pub fn grid_cell_style(is_weekend: bool) -> container::Style {
-    container::Style {
-        background: weekend_background(is_weekend),
-        border: Border {
-            width: BORDER_WIDTH_THIN,
-            color: COLOR_DAY_CELL_BORDER,
-            ..Default::default()
-        },
-        ..Default::default()
-    }
-}
-
-/// Style for a bordered cell without weekend background
-pub fn bordered_cell_style() -> container::Style {
-    container::Style {
-        border: Border {
-            width: BORDER_WIDTH_THIN,
-            color: COLOR_DAY_CELL_BORDER,
-            ..Default::default()
-        },
-        ..Default::default()
-    }
-}

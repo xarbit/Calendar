@@ -2,7 +2,8 @@ use cosmic::iced::Length;
 use cosmic::widget::{column, container, row, scrollable};
 use cosmic::Element;
 
-use crate::components::{render_time_grid, render_time_column_placeholder, bordered_cell_style, DayColumn, render_day_header, DayHeaderConfig};
+use crate::components::{render_time_grid, render_time_column_placeholder, DayColumn, render_day_header, DayHeaderConfig};
+use crate::styles::bordered_cell_style;
 use crate::locale::LocalePreferences;
 use crate::message::Message;
 use crate::models::DayState;
