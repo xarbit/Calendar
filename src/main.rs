@@ -5,6 +5,8 @@ mod calendars;
 mod color_constants;
 mod components;
 mod database;
+#[cfg(debug_assertions)]
+mod demo_data;
 mod dialogs;
 mod keyboard;
 mod layout;
@@ -29,8 +31,10 @@ mod views;
 
 use app::CosmicCalendar;
 use cosmic::app::Settings;
+#[cfg(debug_assertions)]
 use database::Database;
 use log::info;
+#[cfg(debug_assertions)]
 use std::env;
 
 /// Application entry point
@@ -40,26 +44,51 @@ pub fn main() -> cosmic::iced::Result {
 
     info!("Sol Calendar starting...");
 
-    // Check for --clear-events flag
-    let args: Vec<String> = env::args().collect();
-    if args.contains(&"--clear-events".to_string()) {
-        info!("--clear-events flag detected, clearing all events from database");
-        match Database::open() {
-            Ok(db) => {
-                match db.clear_all_events() {
+    // Development-only CLI flags (only available in debug builds)
+    #[cfg(debug_assertions)]
+    {
+        let args: Vec<String> = env::args().collect();
+
+        // Check for --dev-reset-db flag
+        if args.contains(&"--dev-reset-db".to_string()) {
+            info!("[DEV] Clearing all events from database");
+            match Database::open() {
+                Ok(db) => match db.clear_all_events() {
                     Ok(count) => {
-                        info!("Cleared {} events from database", count);
-                        println!("Cleared {} events from database", count);
+                        info!("[DEV] Cleared {} events from database", count);
+                        println!("[DEV] Cleared {} events from database", count);
                     }
                     Err(e) => {
-                        log::error!("Failed to clear events: {}", e);
-                        eprintln!("Failed to clear events: {}", e);
+                        log::error!("[DEV] Failed to clear events: {}", e);
+                        eprintln!("[DEV] Failed to clear events: {}", e);
                     }
+                },
+                Err(e) => {
+                    log::error!("[DEV] Failed to open database: {}", e);
+                    eprintln!("[DEV] Failed to open database: {}", e);
                 }
             }
-            Err(e) => {
-                log::error!("Failed to open database: {}", e);
-                eprintln!("Failed to open database: {}", e);
+        }
+
+        // Check for --dev-seed-data flag
+        if args.contains(&"--dev-seed-data".to_string()) {
+            info!("[DEV] Generating demo events for a full year");
+            println!("[DEV] Seeding database with demo data...");
+            match Database::open() {
+                Ok(db) => match demo_data::populate_demo_data(&db) {
+                    Ok(count) => {
+                        info!("[DEV] Generated {} demo events", count);
+                        println!("[DEV] Successfully generated {} demo events", count);
+                    }
+                    Err(e) => {
+                        log::error!("[DEV] Failed to generate demo data: {}", e);
+                        eprintln!("[DEV] Failed to generate demo data: {}", e);
+                    }
+                },
+                Err(e) => {
+                    log::error!("[DEV] Failed to open database: {}", e);
+                    eprintln!("[DEV] Failed to open database: {}", e);
+                }
             }
         }
     }
