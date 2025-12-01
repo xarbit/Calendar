@@ -461,19 +461,33 @@ fn render_day_column_with_events(
     selection: Option<&SelectionState>,
     quick_event: Option<(NaiveTime, NaiveTime, &str, &str)>, // (start_time, end_time, text, color)
 ) -> Element<'static, Message> {
-    // Build the base hour grid (background layer) - now with click support
-    let hour_grid = render_hour_grid_background(date, is_weekend, is_today, today_in_week, current_hour, current_minute, selection);
+    // Build the base hour grid (background layer) - without time indicator
+    let hour_grid = render_hour_grid_background(date, is_weekend, selection);
+
+    // Build the time indicator layer (rendered on top of events)
+    let time_indicator_layer = if today_in_week {
+        let minute_offset = (current_minute as f32 / 60.0) * HOUR_ROW_HEIGHT;
+        Some(render_time_indicator_layer(current_hour, minute_offset, is_today))
+    } else {
+        None
+    };
 
     // Build quick event input layer if active
     let quick_event_layer = quick_event.map(|(start_time, end_time, text, color)| {
         render_quick_event_input_layer(start_time, end_time, text.to_string(), color.to_string())
     });
 
-    // If no events and no quick event, just return the grid
+    // If no events and no quick event, just return the grid with time indicator on top
     if events.is_empty() && quick_event_layer.is_none() {
-        return container(hour_grid)
-            .width(Length::Fill)
-            .into();
+        return if let Some(time_layer) = time_indicator_layer {
+            container(stack![hour_grid, time_layer])
+                .width(Length::Fill)
+                .into()
+        } else {
+            container(hour_grid)
+                .width(Length::Fill)
+                .into()
+        };
     }
 
     // Calculate column assignments for overlapping events
@@ -483,18 +497,29 @@ fn render_day_column_with_events(
     // Build the events overlay layer
     let events_layer = render_events_overlay_layer(date, &positioned_events, max_columns, selected_event_uid);
 
-    // Use stack to overlay events on top of the grid, and quick event on top of that
-    let stacked: Element<'static, Message> = if let Some(qe_layer) = quick_event_layer {
-        stack![
+    // Stack order: grid (bottom) -> events -> time indicator -> quick event (top)
+    // Time indicator must be above events so it's always visible
+    let stacked: Element<'static, Message> = match (time_indicator_layer, quick_event_layer) {
+        (Some(time_layer), Some(qe_layer)) => stack![
+            hour_grid,
+            events_layer,
+            time_layer,
+            qe_layer
+        ].into(),
+        (Some(time_layer), None) => stack![
+            hour_grid,
+            events_layer,
+            time_layer
+        ].into(),
+        (None, Some(qe_layer)) => stack![
             hour_grid,
             events_layer,
             qe_layer
-        ].into()
-    } else {
-        stack![
+        ].into(),
+        (None, None) => stack![
             hour_grid,
             events_layer
-        ].into()
+        ].into(),
     };
 
     container(stacked)
@@ -502,37 +527,112 @@ fn render_day_column_with_events(
         .into()
 }
 
-/// Render the hour grid background (lines only, no events) with clickable time slots
+/// Render the hour grid background (lines only, no events or time indicator) with clickable time slots
 fn render_hour_grid_background(
     date: NaiveDate,
     is_weekend: bool,
-    is_today: bool,
-    today_in_week: bool,
-    current_hour: u32,
-    current_minute: u32,
     selection: Option<&SelectionState>,
 ) -> Element<'static, Message> {
     let mut hour_cells = column().spacing(0);
 
     for hour in 0..24u32 {
-        // Show time line in all columns if today is in this week and it's the current hour
-        let show_time_line = today_in_week && hour == current_hour;
-        // Show the dot only on today's column
-        let show_time_dot = is_today && hour == current_hour;
         // Check if this hour cell is within the current selection
         let is_selected = selection.map(|s| s.is_active && s.contains_time(date, hour)).unwrap_or(false);
-
-        let cell = if show_time_line {
-            let minute_offset = (current_minute as f32 / 60.0) * HOUR_ROW_HEIGHT;
-            render_clickable_hour_cell_with_indicator(date, hour, is_weekend, minute_offset, is_selected, show_time_dot)
-        } else {
-            render_clickable_hour_cell(date, hour, is_weekend, is_selected)
-        };
-
+        let cell = render_clickable_hour_cell(date, hour, is_weekend, is_selected);
         hour_cells = hour_cells.push(cell);
     }
 
     hour_cells.into()
+}
+
+/// Render the current time indicator as a separate overlay layer
+/// This is rendered on top of events so the red line is always visible
+fn render_time_indicator_layer(
+    current_hour: u32,
+    minute_offset: f32,
+    show_dot: bool,
+) -> Element<'static, Message> {
+    // Total height of the grid (24 hours)
+    let total_height = 24.0 * HOUR_ROW_HEIGHT;
+
+    // Calculate position from start of day
+    let hour_offset = current_hour as f32 * HOUR_ROW_HEIGHT;
+    let total_offset = hour_offset + minute_offset;
+
+    // Indicator dimensions
+    let dot_size = 8.0_f32;
+    let line_height = 2.0_f32;
+
+    // Position the indicator with a top spacer (centered on the line)
+    let adjusted_offset = (total_offset - (dot_size / 2.0)).max(0.0);
+    let top_spacer = container(widget::text(""))
+        .height(Length::Fixed(adjusted_offset))
+        .width(Length::Fill);
+
+    // Time indicator - line in all columns, dot only on today's column
+    let time_indicator: Element<'static, Message> = if show_dot {
+        // Today's column: dot on left, line filling the rest
+        let dot = container(widget::text(""))
+            .width(Length::Fixed(dot_size))
+            .height(Length::Fixed(dot_size))
+            .style(|_theme: &cosmic::Theme| container::Style {
+                background: Some(Background::Color(COLOR_CURRENT_TIME)),
+                border: Border {
+                    radius: 4.0.into(),
+                    ..Default::default()
+                },
+                ..Default::default()
+            });
+
+        let time_line = container(
+            container(widget::text(""))
+                .width(Length::Fill)
+                .height(Length::Fixed(line_height))
+                .style(|_theme: &cosmic::Theme| container::Style {
+                    background: Some(Background::Color(COLOR_CURRENT_TIME)),
+                    ..Default::default()
+                })
+        )
+        .width(Length::Fill)
+        .height(Length::Fixed(dot_size))
+        .align_y(alignment::Vertical::Center);
+
+        row()
+            .spacing(0)
+            .align_y(alignment::Vertical::Center)
+            .push(dot)
+            .push(time_line)
+            .into()
+    } else {
+        // Other columns: just the line
+        container(
+            container(widget::text(""))
+                .width(Length::Fill)
+                .height(Length::Fixed(line_height))
+                .style(|_theme: &cosmic::Theme| container::Style {
+                    background: Some(Background::Color(COLOR_CURRENT_TIME)),
+                    ..Default::default()
+                })
+        )
+        .width(Length::Fill)
+        .height(Length::Fixed(dot_size))
+        .align_y(alignment::Vertical::Center)
+        .into()
+    };
+
+    // Fill remaining space after indicator
+    let remaining_height = (total_height - adjusted_offset - dot_size).max(0.0);
+    let bottom_spacer = container(widget::text(""))
+        .height(Length::Fixed(remaining_height))
+        .width(Length::Fill);
+
+    column()
+        .spacing(0)
+        .push(top_spacer)
+        .push(time_indicator)
+        .push(bottom_spacer)
+        .width(Length::Fill)
+        .into()
 }
 
 /// Render the events overlay layer with events positioned based on their time spans
@@ -699,126 +799,6 @@ fn render_clickable_hour_cell(date: NaiveDate, hour: u32, is_weekend: bool, is_s
     });
 
     let cell = container(widget::text(""))
-        .width(Length::Fill)
-        .height(Length::Fixed(HOUR_ROW_HEIGHT))
-        .style(move |theme: &cosmic::Theme| {
-            let background = if is_selected {
-                // Use theme accent color for selection (consistent with month view)
-                let accent = theme.cosmic().accent_color();
-                Some(Background::Color(cosmic::iced::Color::from_rgba(
-                    accent.red, accent.green, accent.blue, 0.2
-                )))
-            } else if is_weekend {
-                Some(Background::Color(COLOR_WEEKEND_BACKGROUND))
-            } else {
-                None
-            };
-            container::Style {
-                background,
-                border: Border {
-                    width: BORDER_WIDTH_THIN,
-                    color: COLOR_DAY_CELL_BORDER,
-                    ..Default::default()
-                },
-                ..Default::default()
-            }
-        });
-
-    // Press: start time selection for creating timed events
-    // Release: end time selection
-    // on_enter: update time selection (for drag selection)
-    // Double-click: open new event dialog
-    mouse_area(cell)
-        .on_press(Message::TimeSelectionStart(date, start_time))
-        .on_release(Message::TimeSelectionEnd)
-        .on_double_click(Message::OpenNewEventDialog)
-        .on_enter(Message::TimeSelectionUpdate(date, start_time))
-        .into()
-}
-
-/// Render a clickable hour cell with the current time indicator
-fn render_clickable_hour_cell_with_indicator(
-    date: NaiveDate,
-    hour: u32,
-    is_weekend: bool,
-    minute_offset: f32,
-    is_selected: bool,
-    show_dot: bool,
-) -> Element<'static, Message> {
-    // Create the time for this hour cell
-    let start_time = NaiveTime::from_hms_opt(hour, 0, 0).unwrap();
-
-    // The line spans full width in all columns
-    // Dot is 8px, line is 2px - both centered vertically in an 8px row
-    let dot_size = 8.0_f32;
-    let line_height = 2.0_f32;
-
-    // Adjust the top spacer to account for the indicator being 8px tall (dot height)
-    // We want the CENTER of the indicator (where the line is) to be at minute_offset
-    // So we subtract half the dot size from the offset
-    let adjusted_offset = (minute_offset - (dot_size / 2.0)).max(0.0);
-    let top_spacer = container(widget::text(""))
-        .height(Length::Fixed(adjusted_offset))
-        .width(Length::Fill);
-
-    // Time indicator - line in all columns, dot overlaid on today's column only
-    let time_indicator: Element<'static, Message> = if show_dot {
-        // Today's column: dot on left, line filling the rest, vertically centered
-        let dot = container(widget::text(""))
-            .width(Length::Fixed(dot_size))
-            .height(Length::Fixed(dot_size))
-            .style(|_theme: &cosmic::Theme| container::Style {
-                background: Some(Background::Color(COLOR_CURRENT_TIME)),
-                border: Border {
-                    radius: 4.0.into(), // dot_size / 2.0
-                    ..Default::default()
-                },
-                ..Default::default()
-            });
-
-        // Line with vertical padding to center it within the 8px row height
-        let time_line = container(
-            container(widget::text(""))
-                .width(Length::Fill)
-                .height(Length::Fixed(line_height))
-                .style(|_theme: &cosmic::Theme| container::Style {
-                    background: Some(Background::Color(COLOR_CURRENT_TIME)),
-                    ..Default::default()
-                })
-        )
-        .width(Length::Fill)
-        .height(Length::Fixed(dot_size))
-        .align_y(alignment::Vertical::Center);
-
-        row()
-            .spacing(0)
-            .align_y(alignment::Vertical::Center)
-            .push(dot)
-            .push(time_line)
-            .into()
-    } else {
-        // Other columns: just the line, centered vertically in 8px height to match dot columns
-        container(
-            container(widget::text(""))
-                .width(Length::Fill)
-                .height(Length::Fixed(line_height))
-                .style(|_theme: &cosmic::Theme| container::Style {
-                    background: Some(Background::Color(COLOR_CURRENT_TIME)),
-                    ..Default::default()
-                })
-        )
-        .width(Length::Fill)
-        .height(Length::Fixed(dot_size))
-        .align_y(alignment::Vertical::Center)
-        .into()
-    };
-
-    let content = column()
-        .spacing(0)
-        .push(top_spacer)
-        .push(time_indicator);
-
-    let cell = container(content)
         .width(Length::Fill)
         .height(Length::Fixed(HOUR_ROW_HEIGHT))
         .style(move |theme: &cosmic::Theme| {
