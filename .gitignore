@@ -1,1 +1,6 @@
 /target
+.flatpak-builder
+build-dir
+flatpak-repo
+*.flatpak
+IMPLEMENTATION_PLAN.md
