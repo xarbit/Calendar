@@ -32,14 +32,48 @@ pub fn handle_import_file(app: &mut CosmicCalendar, path: PathBuf) -> Task<Messa
 
             info!("handle_import_file: Parsed {} events", events.len());
 
-            // Open the import dialog with parsed events
-            DialogManager::handle_action(
-                &mut app.active_dialog,
-                DialogAction::OpenImport {
-                    events,
-                    source_file_name,
-                },
-            );
+            // Smart import logic:
+            // - Single event: Add to default calendar and open event dialog pre-filled
+            // - Multiple events: Open import dialog for calendar selection
+            if events.len() == 1 {
+                info!("handle_import_file: Single event - opening event dialog");
+
+                // Get first (and only) event
+                let event = events.into_iter().next().unwrap();
+
+                // Get the first available calendar as default
+                if let Some(calendar) = app.calendar_manager.sources().first() {
+                    let calendar_id = calendar.info().id.clone();
+
+                    // Add event to the default calendar
+                    match EventHandler::add_event(&mut app.calendar_manager, &calendar_id, event.clone()) {
+                        Ok(_) => {
+                            info!("handle_import_file: Event added to calendar '{}'", calendar_id);
+                            // Refresh the calendar view
+                            app.refresh_cached_events();
+                            // Open the event dialog for editing/review
+                            return Task::done(cosmic::Action::App(Message::OpenEditEventDialog(event.uid)));
+                        }
+                        Err(e) => {
+                            error!("handle_import_file: Failed to add event: {}", e);
+                            // TODO: Show error notification
+                        }
+                    }
+                } else {
+                    error!("handle_import_file: No calendars available");
+                    // TODO: Show error notification
+                }
+            } else {
+                // Multiple events: Use import dialog for calendar selection
+                info!("handle_import_file: Multiple events - opening import dialog");
+                DialogManager::handle_action(
+                    &mut app.active_dialog,
+                    DialogAction::OpenImport {
+                        events,
+                        source_file_name,
+                    },
+                );
+            }
         }
         Err(e) => {
             error!("handle_import_file: Failed to parse file: {}", e);
