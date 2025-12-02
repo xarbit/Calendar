@@ -1,6 +1,6 @@
 app-id: io.github.xarbit.SolCalendar
 runtime: org.freedesktop.Platform
-runtime-version: '25.08'
+runtime-version: "25.08"
 sdk: org.freedesktop.Sdk
 sdk-extensions:
   - org.freedesktop.Sdk.Extension.rust-stable
@@ -35,18 +35,18 @@ build-options:
   append-path: /usr/lib/sdk/rust-stable/bin
   env:
     CARGO_HOME: /run/build/sol-calendar/cargo
+    FLATPAK_ID: io.github.xarbit.SolCalendar
 
 modules:
   - name: sol-calendar
     buildsystem: simple
     build-commands:
       - cargo --offline fetch --manifest-path Cargo.toml --verbose
-      - cargo --offline build --release --verbose
+      - cargo --offline build --release --verbose --features single-instance
       - install -Dm755 ./target/release/sol-calendar -t /app/bin/
       - install -Dm644 ./res/io.github.xarbit.SolCalendar.desktop /app/share/applications/io.github.xarbit.SolCalendar.desktop
       - install -Dm644 ./res/io.github.xarbit.SolCalendar.metainfo.xml /app/share/metainfo/io.github.xarbit.SolCalendar.metainfo.xml
       - install -Dm644 ./res/icons/hicolor/scalable/apps/io.github.xarbit.SolCalendar.svg /app/share/icons/hicolor/scalable/apps/io.github.xarbit.SolCalendar.svg
-      - install -Dm644 ./res/io.github.xarbit.SolCalendar.service /app/share/dbus-1/services/io.github.xarbit.SolCalendar.service
 
     sources:
       - type: dir

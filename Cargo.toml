@@ -9,12 +9,11 @@ authors = ["xarbit"]
 
 [dependencies]
 # COSMIC framework with all recommended features
-libcosmic = { git = "https://github.com/pop-os/libcosmic.git", default-features = false, features = [
+libcosmic = { git = "https://github.com/pop-os/libcosmic.git", rev = "f2e965c76cddf3bac183e35f2c7b91874b5f2628", default-features = false, features = [
     "a11y",           # Accessibility support
     "about",          # About dialog widget
     "dbus-config",    # Config file change watching via cosmic-settings-daemon
-    "multi-window",   # Support for additional windows
-    "single-instance",# Prevent multiple app instances
+    "multi-window",   # Multi-window support (required for single-instance)
     "tokio",          # Tokio async runtime
     "wayland",        # Wayland support
     "winit",          # Windowing system
@@ -22,7 +21,7 @@ libcosmic = { git = "https://github.com/pop-os/libcosmic.git", default-features 
 ] }
 
 # Async runtime
-tokio = { version = "1.41", features = ["full"] }
+tokio = { version = "1", features = ["sync"] }
 futures-util = "0.3"
 
 # Date/Time handling
@@ -71,3 +70,9 @@ clap = { version = "4.5", features = ["derive"] }
 
 # Note: cosmic-text is pinned via Cargo.lock to commit 9339446cfa9b7f0110094a97764dccc09cfa98a2
 # This is a known working version. Do not update libcosmic without verifying cosmic-text compatibility.
+
+[features]
+# Single-instance support via D-Bus (disabled by default due to system compatibility issues)
+# Enable with: cargo build --features single-instance
+# Or disable at runtime with: COSMIC_SINGLE_INSTANCE=false sol-calendar
+single-instance = ["libcosmic/single-instance"]

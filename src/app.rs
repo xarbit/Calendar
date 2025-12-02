@@ -11,7 +11,7 @@ use crate::selection::{SelectionState, EventDragState};
 use crate::settings::AppSettings;
 use crate::views::{self, CalendarView};
 use chrono::{Datelike, NaiveDate};
-use cosmic::app::Core;
+use cosmic::app::{Core, Task};
 use cosmic::iced::keyboard;
 use cosmic::widget::icon;
 use cosmic::widget::calendar::CalendarModel;
@@ -22,7 +22,13 @@ use log::info;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-const APP_ID: &str = "io.github.xarbit.SolCalendar";
+// Use different APP_ID for development builds to avoid conflicts with installed Flatpak
+// Flatpak builds are detected via FLATPAK_ID environment variable at compile time
+const APP_ID: &str = if option_env!("FLATPAK_ID").is_some() {
+    "io.github.xarbit.SolCalendar"
+} else {
+    "io.github.xarbit.SolCalendar.Devel"
+};
 
 /// Command-line flags passed to the application
 #[derive(Debug, Clone, Default)]
@@ -31,6 +37,15 @@ pub struct AppFlags {
     pub files_to_open: Vec<PathBuf>,
     /// URLs to open on startup (webcal://, ics://, calendar:// schemes)
     pub urls_to_open: Vec<String>,
+}
+
+impl cosmic::app::CosmicFlags for AppFlags {
+    type SubCommand = String;
+    type Args = Vec<String>;
+
+    fn action(&self) -> Option<&Self::SubCommand> {
+        None
+    }
 }
 
 /// Enum for which field is being edited in the event dialog
@@ -397,7 +412,7 @@ impl Default for CosmicCalendar {
 }
 
 impl Application for CosmicCalendar {
-    type Executor = cosmic::executor::Default;
+    type Executor = cosmic::executor::multi::Executor;
     type Flags = AppFlags;
     type Message = Message;
     const APP_ID: &'static str = APP_ID;
@@ -411,7 +426,6 @@ impl Application for CosmicCalendar {
     }
 
     fn init(core: Core, flags: Self::Flags) -> (Self, cosmic::app::Task<Self::Message>) {
-        info!("CosmicCalendar: Initializing application");
         let app = Self::initialize_app(core);
         info!("CosmicCalendar: Application initialized with view {:?}", app.current_view);
 
@@ -529,5 +543,68 @@ impl Application for CosmicCalendar {
             .map(|_| Message::TimeTick);
 
         Subscription::batch([event_sub, timer_sub])
+    }
+
+    #[cfg(feature = "single-instance")]
+    fn dbus_activation(
+        &mut self,
+        msg: cosmic::dbus_activation::Message,
+    ) -> Task<Self::Message> {
+        use cosmic::dbus_activation::Details;
+        use log::{debug, info};
+
+        info!(
+            "D-Bus activation received: token={:?}",
+            msg.activation_token
+        );
+
+        match msg.msg {
+            Details::Activate => {
+                // Another instance tried to launch - window automatically comes to front
+                info!("D-Bus activation: Activate (bringing window to foreground)");
+                Task::none()
+            }
+            Details::Open { url } => {
+                // Another instance tried to open files/URLs
+                info!("D-Bus activation: Open with {} URL(s)", url.len());
+
+                if url.is_empty() {
+                    return Task::none();
+                }
+
+                // Process the first URL/file
+                let first_url = &url[0];
+                debug!("D-Bus activation: Processing URL: {}", first_url);
+
+                if first_url.scheme() == "file" {
+                    // File path - trigger import
+                    if let Ok(path) = first_url.to_file_path() {
+                        info!("D-Bus activation: Importing file: {:?}", path);
+                        return Task::done(cosmic::Action::App(Message::ImportFile(
+                            path,
+                        )));
+                    }
+                } else if first_url.scheme() == "webcal"
+                    || first_url.scheme() == "ics"
+                    || first_url.scheme() == "calendar"
+                {
+                    // Calendar URL - trigger subscription
+                    let url_str = first_url.to_string();
+                    info!("D-Bus activation: Processing calendar URL: {}", url_str);
+                    return Task::done(cosmic::Action::App(Message::ProcessUrl(
+                        url_str,
+                    )));
+                }
+
+                // Unknown scheme - window still comes to front
+                info!("D-Bus activation: Unknown URL scheme: {}", first_url.scheme());
+                Task::none()
+            }
+            Details::ActivateAction { .. } => {
+                // Not used by this app
+                debug!("D-Bus activation: ActivateAction (not implemented)");
+                Task::none()
+            }
+        }
     }
 }

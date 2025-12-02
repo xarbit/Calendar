@@ -158,5 +158,20 @@ pub fn main() -> cosmic::iced::Result {
     localize::init();
 
     info!("Localization initialized, launching application");
-    cosmic::app::run::<CosmicCalendar>(Settings::default(), app_flags)
+
+    // Configure application settings
+    let settings = Settings::default()
+        .exit_on_close(true);  // exit_on_close(true) prevents D-Bus blocking hang
+
+    #[cfg(feature = "single-instance")]
+    {
+        info!("Launching with single-instance support (use COSMIC_SINGLE_INSTANCE=false to disable)");
+        cosmic::app::run_single_instance::<CosmicCalendar>(settings, app_flags)
+    }
+
+    #[cfg(not(feature = "single-instance"))]
+    {
+        info!("Launching without single-instance");
+        cosmic::app::run::<CosmicCalendar>(settings, app_flags)
+    }
 }
