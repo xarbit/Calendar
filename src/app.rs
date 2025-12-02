@@ -29,6 +29,8 @@ const APP_ID: &str = "io.github.xarbit.SolCalendar";
 pub struct AppFlags {
     /// Files to open on startup (e.g., .ics files)
     pub files_to_open: Vec<PathBuf>,
+    /// URLs to open on startup (webcal://, ics://, calendar:// schemes)
+    pub urls_to_open: Vec<String>,
 }
 
 /// Enum for which field is being edited in the event dialog

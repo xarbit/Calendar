@@ -2,7 +2,9 @@
 
 use crate::app::CosmicCalendar;
 use crate::dialogs::{ActiveDialog, DialogManager};
-use crate::services::{CalendarHandler, NewCalendarData, UpdateCalendarData};
+use crate::services::{CalendarHandler, ExportHandler, NewCalendarData, UpdateCalendarData};
+use chrono::Local;
+use cosmic::app::Task;
 use log::{debug, error, info, warn};
 
 /// Toggle a calendar's enabled state and save configuration
@@ -212,4 +214,47 @@ pub fn handle_confirm_delete_calendar(app: &mut CosmicCalendar) {
             error!("Failed to delete calendar '{}': {}", calendar_id, e);
         }
     }
+}
+
+/// Open a file save dialog to export a calendar to an iCalendar file
+pub fn handle_export_calendar_dialog(
+    app: &mut CosmicCalendar,
+    calendar_id: String,
+    calendar_name: String,
+) -> Task<crate::message::Message> {
+    debug!("handle_export_calendar_dialog: Exporting calendar '{}' ({})", calendar_name, calendar_id);
+
+    // Generate suggested filename: CalendarName-YYYY-MM-DD.ics
+    let today = Local::now().format("%Y-%m-%d").to_string();
+    let suggested_filename = format!("{}-{}.ics", calendar_name, today);
+
+    // Open file save dialog in a background task
+    Task::perform(
+        async move {
+            let file_dialog = rfd::AsyncFileDialog::new()
+                .set_title("Export Calendar")
+                .set_file_name(&suggested_filename)
+                .add_filter("iCalendar", &["ics", "ical", "ifb", "icalendar"])
+                .save_file();
+
+            match file_dialog.await {
+                Some(file_handle) => {
+                    let path = file_handle.path().to_path_buf();
+                    Some((calendar_id, path))
+                }
+                None => {
+                    debug!("Export cancelled by user");
+                    None
+                }
+            }
+        },
+        |result| {
+            if let Some((calendar_id, path)) = result {
+                cosmic::Action::App(crate::message::Message::ExportCalendarToFile(calendar_id, path))
+            } else {
+                // User cancelled
+                cosmic::Action::App(crate::message::Message::None)
+            }
+        },
+    )
 }

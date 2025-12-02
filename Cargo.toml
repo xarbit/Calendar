@@ -31,8 +31,8 @@ chrono = { version = "0.4", features = ["serde"] }
 # Calendar formats
 icalendar = "0.16"
 
-# HTTP client for CalDAV
-reqwest = { version = "0.12", features = ["blocking"] }
+# HTTP client for CalDAV and URL downloads
+reqwest = { version = "0.12", features = ["blocking", "rustls-tls", "charset", "http2"] }
 
 # Serialization
 serde = { version = "1.0", features = ["derive"] }
@@ -43,6 +43,9 @@ dirs = "5.0"
 
 # File dialogs (with XDG portal support for Flatpak)
 rfd = "0.15"
+
+# URL parsing
+url = "2.5"
 
 # Internationalization
 i18n-embed = { version = "0.16", features = ["fluent-system", "desktop-requester"] }

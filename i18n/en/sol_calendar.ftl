@@ -43,6 +43,7 @@ week-abbr = Wk
 # Calendar actions
 calendar-add = Add Calendar
 calendar-edit = Edit Calendar
+calendar-export = Export Calendar
 calendar-delete = Delete Calendar
 calendar-select = Select Calendar
 calendar-toggle = Toggle visibility

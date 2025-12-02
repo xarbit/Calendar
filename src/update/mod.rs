@@ -120,11 +120,34 @@ fn close_quick_event_with_scroll_restore(app: &mut CosmicCalendar) -> Task<Messa
     }
 }
 
+/// Handle exporting a calendar to an iCalendar file
+fn handle_export_calendar_to_file(
+    app: &mut CosmicCalendar,
+    calendar_id: String,
+    path: std::path::PathBuf,
+) -> Task<Message> {
+    debug!("handle_export_calendar_to_file: Exporting calendar '{}' to {:?}", calendar_id, path);
+
+    match ExportHandler::export_to_file(&app.calendar_manager, &calendar_id, &path) {
+        Ok(()) => {
+            info!("Exported calendar '{}' to {:?}", calendar_id, path);
+            // TODO: Show success toast notification
+        }
+        Err(e) => {
+            error!("Failed to export calendar '{}': {}", calendar_id, e);
+            // TODO: Show error toast notification
+        }
+    }
+
+    Task::none()
+}
+
 // Re-export handlers for use in this module
 use calendar::{
     handle_change_calendar_color, handle_confirm_calendar_dialog, handle_confirm_delete_calendar,
-    handle_delete_selected_calendar, handle_open_calendar_dialog_create,
-    handle_open_calendar_dialog_edit, handle_request_delete_calendar, handle_toggle_calendar,
+    handle_delete_selected_calendar, handle_export_calendar_dialog,
+    handle_open_calendar_dialog_create, handle_open_calendar_dialog_edit,
+    handle_request_delete_calendar, handle_toggle_calendar,
 };
 use event::{
     extract_master_uid, extract_occurrence_date, handle_cancel_event_dialog, handle_cancel_quick_event,
@@ -324,6 +347,14 @@ pub fn handle_message(app: &mut CosmicCalendar, message: Message) -> Task<Messag
             if let Some(calendar) = app.calendar_manager.sources().get(index) {
                 let id = calendar.info().id.clone();
                 handle_open_calendar_dialog_edit(app, id);
+            }
+        }
+        Message::ExportCalendarByIndex(index) => {
+            DialogManager::close(&mut app.active_dialog);
+            if let Some(calendar) = app.calendar_manager.sources().get(index) {
+                let calendar_id = calendar.info().id.clone();
+                let calendar_name = calendar.info().name.clone();
+                return handle_export_calendar_dialog(app, calendar_id, calendar_name);
             }
         }
         Message::CalendarDialogNameChanged(name) => {
@@ -985,6 +1016,12 @@ pub fn handle_message(app: &mut CosmicCalendar, message: Message) -> Task<Messag
         Message::RevertImport => {
             return import::handle_revert_import(app);
         }
+        Message::ExportCalendarToFile(calendar_id, path) => {
+            return handle_export_calendar_to_file(app, calendar_id, path);
+        }
+
+        // No-op for cancelled operations
+        Message::None => {}
     }
 
     Task::none()

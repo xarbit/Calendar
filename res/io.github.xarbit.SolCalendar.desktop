@@ -10,4 +10,4 @@ Terminal=false
 StartupNotify=true
 StartupWMClass=sol-calendar
 Keywords=calendar;event;appointment;reminder;ical;ics;
-MimeType=text/calendar;text/x-vcalendar;application/ics;
+MimeType=text/calendar;text/x-vcalendar;application/ics;x-scheme-handler/webcal;x-scheme-handler/ics;x-scheme-handler/calendar;

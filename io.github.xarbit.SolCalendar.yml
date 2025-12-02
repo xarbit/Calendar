@@ -24,6 +24,13 @@ finish-args:
   - --filesystem=xdg-documents:rw
   - --filesystem=xdg-download:rw
 
+  # Network access for webcal:// and ics:// URL downloads
+  - --share=network
+
+  # D-Bus access for URL handler registration
+  - --talk-name=org.freedesktop.Flatpak
+  - --own-name=io.github.xarbit.SolCalendar
+
 build-options:
   append-path: /usr/lib/sdk/rust-stable/bin
   env:

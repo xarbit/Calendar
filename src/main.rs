@@ -26,6 +26,7 @@ mod storage;
 mod styles;
 mod ui_constants;
 mod update;
+mod url_handler;
 mod validation;
 mod views;
 
@@ -44,9 +45,9 @@ use std::path::PathBuf;
 #[command(name = "sol-calendar")]
 #[command(about = "A calendar application for the COSMIC Desktop", long_about = None)]
 struct Cli {
-    /// Calendar files to import (.ics files)
-    #[arg(value_name = "FILE")]
-    files: Vec<PathBuf>,
+    /// Calendar files to import (.ics files) or URLs to open (webcal://, ics://, calendar://)
+    #[arg(value_name = "FILE_OR_URL")]
+    inputs: Vec<String>,
 
     /// Reset database (development only, debug builds only)
     #[cfg(debug_assertions)]
@@ -116,13 +117,35 @@ pub fn main() -> cosmic::iced::Result {
         }
     }
 
+    // Separate files and URLs
+    let mut files_to_open = Vec::new();
+    let mut urls_to_open = Vec::new();
+
+    for input in cli.inputs {
+        // Check if input is a URL scheme (webcal://, ics://, calendar://)
+        if input.starts_with("webcal://")
+            || input.starts_with("ics://")
+            || input.starts_with("calendar://")
+        {
+            urls_to_open.push(input);
+        } else {
+            // Treat as file path
+            files_to_open.push(PathBuf::from(input));
+        }
+    }
+
     // Prepare application flags
     let app_flags = AppFlags {
-        files_to_open: cli.files,
+        files_to_open: files_to_open.clone(),
+        urls_to_open: urls_to_open.clone(),
     };
 
-    if !app_flags.files_to_open.is_empty() {
-        info!("Launching with {} file(s) to open", app_flags.files_to_open.len());
+    if !files_to_open.is_empty() {
+        info!("Launching with {} file(s) to open", files_to_open.len());
+    }
+
+    if !urls_to_open.is_empty() {
+        info!("Launching with {} URL(s) to open", urls_to_open.len());
     }
 
     // Initialize localization system

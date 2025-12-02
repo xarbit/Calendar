@@ -62,6 +62,8 @@ pub enum Message {
     OpenEditCalendarDialog(String),
     /// Edit calendar by index (from context menu)
     EditCalendarByIndex(usize),
+    /// Export calendar to iCalendar file by index (from context menu)
+    ExportCalendarByIndex(usize),
     /// Update calendar name while typing in dialog
     CalendarDialogNameChanged(String),
     /// Update calendar color selection in dialog
@@ -242,4 +244,9 @@ pub enum Message {
     CancelImportProgress,
     /// Revert completed import (rollback all imported events)
     RevertImport,
+    /// Export calendar to file (calendar_id, file_path)
+    ExportCalendarToFile(String, PathBuf),
+
+    /// No-op message for cancelled operations
+    None,
 }

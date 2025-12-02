@@ -15,6 +15,7 @@ use crate::ui_constants::{SPACING_MEDIUM, SPACING_SMALL, PADDING_MEDIUM, FONT_SI
 pub enum CalendarContextAction {
     Select(usize),
     Edit(usize),
+    Export(usize),
     Delete(usize),
 }
 
@@ -25,6 +26,7 @@ impl menu::Action for CalendarContextAction {
         match self {
             CalendarContextAction::Select(index) => Message::SelectCalendarByIndex(*index),
             CalendarContextAction::Edit(index) => Message::EditCalendarByIndex(*index),
+            CalendarContextAction::Export(index) => Message::ExportCalendarByIndex(*index),
             CalendarContextAction::Delete(index) => Message::DeleteCalendarByIndex(*index),
         }
     }
@@ -37,6 +39,7 @@ fn calendar_context_menu(index: usize) -> Option<Vec<menu::Tree<Message>>> {
         vec![
             menu::Item::Button(fl!("calendar-select"), None, CalendarContextAction::Select(index)),
             menu::Item::Button(fl!("calendar-edit"), None, CalendarContextAction::Edit(index)),
+            menu::Item::Button(fl!("calendar-export"), None, CalendarContextAction::Export(index)),
             menu::Item::Divider,
             menu::Item::Button(fl!("calendar-delete"), None, CalendarContextAction::Delete(index)),
         ],
