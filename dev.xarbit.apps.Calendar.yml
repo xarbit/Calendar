@@ -20,6 +20,9 @@ finish-args:
   - --talk-name=com.system76.CosmicTheme
   - --talk-name=com.system76.CosmicTheme.*
 
+  # COSMIC config access for theme switching
+  - --filesystem=xdg-config/cosmic:ro
+
   # Filesystem access for calendar import/export
   - --filesystem=xdg-documents:rw
   - --filesystem=xdg-download:rw
