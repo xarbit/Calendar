@@ -82,7 +82,13 @@ flatpak-build:
 
 # Build standalone Flatpak bundle (.flatpak file)
 flatpak-bundle:
+    python3 scripts/flatpak-cargo-generator.py Cargo.lock -o cargo-sources.json
+    @echo "✅ Generated cargo-sources.json"
     bash scripts/build-flatpak-bundle.sh
+
+# Install standalone Flatpak bundle (.flatpak file)
+flatpak-bundle-install:
+    flatpak install --user sol-calendar.flatpak
 
 # Run Flatpak
 flatpak-run *args:
