@@ -29,7 +29,7 @@ mod selection;
 use chrono::{NaiveDate, Timelike};
 use cosmic::app::Task;
 use cosmic::iced::widget::scrollable;
-use log::{debug, error, info};
+use log::{debug, error, info, warn};
 
 use crate::app::CosmicCalendar;
 use crate::components::quick_event_input_id;
@@ -139,6 +139,241 @@ fn handle_export_calendar_to_file(
         }
     }
 
+    Task::none()
+}
+
+/// Handle URL processing (webcal://, ics://, calendar://)
+fn handle_process_url(app: &mut CosmicCalendar, url: String) -> Task<Message> {
+    use crate::url_handler::{parse_url, UrlAction};
+
+    info!("handle_process_url: Processing URL: {}", url);
+
+    match parse_url(&url) {
+        Ok(action) => {
+            match action {
+                UrlAction::ImportRemote { url: https_url } => {
+                    info!("URL Action: ImportRemote from {}", https_url);
+                    // Download calendar asynchronously
+                    return Task::perform(
+                        async move {
+                            use crate::url_handler::download_calendar;
+                            match download_calendar(&https_url).await {
+                                Ok(calendar_data) => Some((https_url, calendar_data)),
+                                Err(e) => {
+                                    error!("Failed to download calendar: {}", e);
+                                    None
+                                }
+                            }
+                        },
+                        |result| {
+                            if let Some((url, calendar_data)) = result {
+                                cosmic::Action::App(Message::ProcessDownloadedCalendar(url, calendar_data))
+                            } else {
+                                cosmic::Action::App(Message::None)
+                            }
+                        },
+                    );
+                }
+                UrlAction::OpenView { view } => {
+                    info!("URL Action: OpenView to {}", view);
+                    // Change view based on URL
+                    use crate::views::CalendarView;
+                    let new_view = match view.as_str() {
+                        "month" => CalendarView::Month,
+                        "week" => CalendarView::Week,
+                        "day" => CalendarView::Day,
+                        "year" => CalendarView::Year,
+                        _ => {
+                            warn!("Unknown view: {}, defaulting to Month", view);
+                            CalendarView::Month
+                        }
+                    };
+                    app.current_view = new_view;
+                }
+                UrlAction::CreateEvent { summary, start, end, location } => {
+                    info!("URL Action: CreateEvent - summary={:?}, start={:?}, end={:?}, location={:?}",
+                          summary, start, end, location);
+                    // TODO: Open event dialog with pre-filled data
+                    info!("Would open event dialog with pre-filled data");
+                }
+                UrlAction::ViewEvent { uid } => {
+                    info!("URL Action: ViewEvent uid={}", uid);
+                    // TODO: Find and select the event
+                    info!("Would select and show event: {}", uid);
+                }
+            }
+        }
+        Err(e) => {
+            error!("Failed to parse URL '{}': {}", url, e);
+            // TODO: Show error dialog
+        }
+    }
+
+    Task::none()
+}
+
+fn handle_process_downloaded_calendar(
+    app: &mut CosmicCalendar,
+    url: String,
+    calendar_data: String,
+) -> Task<Message> {
+    use crate::services::ExportHandler;
+
+    info!("Parsing downloaded calendar data from {}", url);
+
+    // Parse the iCalendar data
+    match ExportHandler::parse_ical_string_with_name(&calendar_data) {
+        Ok((calendar_name, events)) => {
+            info!("Successfully parsed {} events from calendar '{}'", events.len(), calendar_name);
+
+            // Show subscription dialog
+            app.active_dialog = ActiveDialog::SubscribeCalendar {
+                url: url.clone(),
+                calendar_name: calendar_name.clone(),
+                events: events.clone(),
+                selected_calendar_id: None,
+                create_new_calendar: true,  // Default to creating new calendar
+                new_calendar_name: calendar_name.clone(),
+            };
+
+            Task::none()
+        }
+        Err(e) => {
+            error!("Failed to parse calendar data: {}", e);
+            // TODO: Show error dialog
+            Task::none()
+        }
+    }
+}
+
+fn handle_show_subscribe_dialog(
+    app: &mut CosmicCalendar,
+    url: String,
+    calendar_name: String,
+    events: Vec<crate::caldav::CalendarEvent>,
+) -> Task<Message> {
+    app.active_dialog = ActiveDialog::SubscribeCalendar {
+        url,
+        calendar_name: calendar_name.clone(),
+        events,
+        selected_calendar_id: None,
+        create_new_calendar: true,
+        new_calendar_name: calendar_name,
+    };
+    Task::none()
+}
+
+fn handle_select_subscription_calendar(
+    app: &mut CosmicCalendar,
+    calendar_id: String,
+) -> Task<Message> {
+    if let ActiveDialog::SubscribeCalendar {
+        selected_calendar_id,
+        ..
+    } = &mut app.active_dialog
+    {
+        *selected_calendar_id = Some(calendar_id);
+    }
+    Task::none()
+}
+
+fn handle_toggle_create_new_calendar(
+    app: &mut CosmicCalendar,
+    create_new: bool,
+) -> Task<Message> {
+    if let ActiveDialog::SubscribeCalendar {
+        create_new_calendar,
+        ..
+    } = &mut app.active_dialog
+    {
+        *create_new_calendar = create_new;
+    }
+    Task::none()
+}
+
+fn handle_update_subscription_calendar_name(
+    app: &mut CosmicCalendar,
+    name: String,
+) -> Task<Message> {
+    if let ActiveDialog::SubscribeCalendar {
+        new_calendar_name,
+        ..
+    } = &mut app.active_dialog
+    {
+        *new_calendar_name = name;
+    }
+    Task::none()
+}
+
+fn handle_confirm_subscription(app: &mut CosmicCalendar) -> Task<Message> {
+    use crate::services::{CalendarHandler, NewCalendarData};
+
+    if let ActiveDialog::SubscribeCalendar {
+        url,
+        calendar_name: _,
+        events,
+        selected_calendar_id,
+        create_new_calendar,
+        new_calendar_name,
+    } = &app.active_dialog
+    {
+        info!("Confirming subscription from {}", url);
+
+        let target_calendar_id = if *create_new_calendar {
+            // Create new calendar
+            let new_name = new_calendar_name.trim();
+            if new_name.is_empty() {
+                warn!("Cannot create calendar with empty name");
+                return Task::none();
+            }
+
+            let new_calendar_data = NewCalendarData {
+                name: new_name.to_string(),
+                color: "#3584e4".to_string(), // Default blue color
+            };
+
+            match CalendarHandler::create(&mut app.calendar_manager, new_calendar_data) {
+                Ok(calendar_id) => {
+                    info!("Created new calendar '{}' with id={}", new_name, calendar_id);
+                    calendar_id
+                }
+                Err(e) => {
+                    error!("Failed to create calendar: {}", e);
+                    return Task::none();
+                }
+            }
+        } else {
+            // Use existing calendar
+            match selected_calendar_id {
+                Some(id) => id.clone(),
+                None => {
+                    warn!("No calendar selected for subscription");
+                    return Task::none();
+                }
+            }
+        };
+
+        // Transition to import dialog with the target calendar selected
+        let events_to_import = events.clone();
+        info!("Importing {} events into calendar {}", events_to_import.len(), target_calendar_id);
+
+        // Set up import dialog with target calendar pre-selected
+        app.active_dialog = ActiveDialog::Import {
+            events: events_to_import,
+            source_file_name: url.clone(),
+            selected_calendar_id: Some(target_calendar_id),
+        };
+
+        // Immediately confirm the import
+        return import::handle_confirm_import(app);
+    }
+
+    Task::none()
+}
+
+fn handle_cancel_subscription(app: &mut CosmicCalendar) -> Task<Message> {
+    info!("Cancelled calendar subscription");
+    app.active_dialog = ActiveDialog::None;
     Task::none()
 }
 
@@ -1018,6 +1253,38 @@ pub fn handle_message(app: &mut CosmicCalendar, message: Message) -> Task<Messag
         }
         Message::ExportCalendarToFile(calendar_id, path) => {
             return handle_export_calendar_to_file(app, calendar_id, path);
+        }
+
+        Message::ProcessUrl(url) => {
+            return handle_process_url(app, url);
+        }
+
+        Message::ProcessDownloadedCalendar(url, calendar_data) => {
+            return handle_process_downloaded_calendar(app, url, calendar_data);
+        }
+
+        Message::ShowSubscribeDialog(url, calendar_name, events) => {
+            return handle_show_subscribe_dialog(app, url, calendar_name, events);
+        }
+
+        Message::SelectSubscriptionCalendar(calendar_id) => {
+            return handle_select_subscription_calendar(app, calendar_id);
+        }
+
+        Message::ToggleCreateNewCalendar(create_new) => {
+            return handle_toggle_create_new_calendar(app, create_new);
+        }
+
+        Message::UpdateSubscriptionCalendarName(name) => {
+            return handle_update_subscription_calendar_name(app, name);
+        }
+
+        Message::ConfirmSubscription => {
+            return handle_confirm_subscription(app);
+        }
+
+        Message::CancelSubscription => {
+            return handle_cancel_subscription(app);
         }
 
         // No-op for cancelled operations

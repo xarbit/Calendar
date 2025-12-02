@@ -426,6 +426,16 @@ impl Application for CosmicCalendar {
             }
         }
 
+        // Handle URL arguments if provided
+        if !flags.urls_to_open.is_empty() {
+            info!("CosmicCalendar: {} URL(s) to open on startup", flags.urls_to_open.len());
+            // Process the first URL
+            if let Some(url) = flags.urls_to_open.first() {
+                info!("CosmicCalendar: Processing URL: {}", url);
+                return (app, cosmic::app::Task::done(cosmic::Action::App(Message::ProcessUrl(url.clone()))));
+            }
+        }
+
         (app, cosmic::app::Task::none())
     }
 

@@ -206,3 +206,17 @@ about-repository = Repository
 about-license = License
 about-author = Author
 about-support = Support
+
+# Subscribe dialog
+subscribe-dialog-title = Subscribe to Calendar
+subscribe-dialog-url = URL
+subscribe-dialog-calendar-name = Calendar Name
+subscribe-dialog-event-count = {$count ->
+    [one] 1 event found
+    *[other] {$count} events found
+}
+subscribe-dialog-select-calendar = Select target calendar:
+subscribe-dialog-use-existing = Use existing calendar
+subscribe-dialog-create-new = Create new calendar
+subscribe-dialog-new-calendar-placeholder = New calendar name
+subscribe-dialog-subscribe = Subscribe

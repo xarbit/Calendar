@@ -144,6 +144,16 @@ pub enum ActiveDialog {
         /// Optional error message if import failed
         error_message: Option<String>,
     },
+
+    /// Subscribe to remote calendar (webcal://, ics:// URLs)
+    SubscribeCalendar {
+        url: String,
+        calendar_name: String,
+        events: Vec<crate::caldav::CalendarEvent>,
+        selected_calendar_id: Option<String>,
+        create_new_calendar: bool,
+        new_calendar_name: String,
+    },
 }
 
 impl Default for ActiveDialog {

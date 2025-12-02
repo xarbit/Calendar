@@ -121,6 +121,12 @@ pub fn main() -> cosmic::iced::Result {
     let mut files_to_open = Vec::new();
     let mut urls_to_open = Vec::new();
 
+    // Debug: Log all received arguments
+    info!("main: Received {} input arguments", cli.inputs.len());
+    for (i, input) in cli.inputs.iter().enumerate() {
+        info!("main: Argument[{}]: {}", i, input);
+    }
+
     for input in cli.inputs {
         // Check if input is a URL scheme (webcal://, ics://, calendar://)
         if input.starts_with("webcal://")

@@ -19,6 +19,10 @@ metainfo := appid + '.metainfo.xml'
 metainfo-src := 'res' / metainfo
 metainfo-dst := clean(INSTALL_DIR / 'metainfo' / metainfo)
 
+dbus-service := appid + '.service'
+dbus-service-src := 'res' / dbus-service
+dbus-service-dst := clean(INSTALL_DIR / 'dbus-1' / 'services' / dbus-service)
+
 # Default recipe to display help information
 default:
     @just --list
@@ -60,6 +64,7 @@ install:
     install -Dm0755 {{bin-src}} {{bin-dst}}
     install -Dm0644 {{desktop-src}} {{desktop-dst}}
     install -Dm0644 {{metainfo-src}} {{metainfo-dst}}
+    install -Dm0644 {{dbus-service-src}} {{dbus-service-dst}}
 
 # Vendor dependencies
 vendor:

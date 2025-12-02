@@ -247,6 +247,30 @@ pub enum Message {
     /// Export calendar to file (calendar_id, file_path)
     ExportCalendarToFile(String, PathBuf),
 
+    /// Process URL from command line (webcal://, ics://, calendar://)
+    ProcessUrl(String),
+
+    /// Process downloaded calendar data from URL
+    ProcessDownloadedCalendar(String, String),
+
+    /// Show subscription dialog with downloaded calendar data (url, calendar_name, events)
+    ShowSubscribeDialog(String, String, Vec<CalendarEvent>),
+
+    /// Select calendar for subscription
+    SelectSubscriptionCalendar(String),
+
+    /// Toggle between selecting existing calendar or creating new one
+    ToggleCreateNewCalendar(bool),
+
+    /// Update new calendar name for subscription
+    UpdateSubscriptionCalendarName(String),
+
+    /// Confirm calendar subscription
+    ConfirmSubscription,
+
+    /// Cancel subscription
+    CancelSubscription,
+
     /// No-op message for cancelled operations
     None,
 }

@@ -251,6 +251,43 @@ impl ExportHandler {
         Ok(events)
     }
 
+    /// Parse iCalendar string and extract calendar name and events
+    /// Returns (calendar_name, events) tuple
+    #[allow(dead_code)] // Part of import API
+    pub fn parse_ical_string_with_name(ical_str: &str) -> ExportResult<(String, Vec<CalendarEvent>)> {
+        debug!("ExportHandler: Parsing iCal string with name ({} bytes)", ical_str.len());
+
+        let calendar = ical_str.parse::<Calendar>().map_err(|e| {
+            error!("ExportHandler: Failed to parse iCalendar: {}", e);
+            ExportError::ParseError(e.to_string())
+        })?;
+
+        // Extract calendar name from X-WR-CALNAME property or use default
+        let calendar_name = calendar
+            .property_value("X-WR-CALNAME")
+            .or_else(|| calendar.property_value("NAME"))
+            .unwrap_or("Imported Calendar")
+            .to_string();
+
+        debug!("ExportHandler: Extracted calendar name: {}", calendar_name);
+
+        let mut events = Vec::new();
+        for component in calendar.components {
+            if let icalendar::CalendarComponent::Event(ical_event) = component {
+                match Self::ical_event_to_calendar_event(&ical_event) {
+                    Ok(event) => events.push(event),
+                    Err(e) => {
+                        warn!("ExportHandler: Skipping invalid event: {}", e);
+                        continue;
+                    }
+                }
+            }
+        }
+
+        info!("ExportHandler: Successfully parsed calendar '{}' with {} events", calendar_name, events.len());
+        Ok((calendar_name, events))
+    }
+
     /// Convert an icalendar::Event to a CalendarEvent
     #[allow(dead_code)] // Part of import API
     fn ical_event_to_calendar_event(ical_event: &Event) -> ExportResult<CalendarEvent> {
